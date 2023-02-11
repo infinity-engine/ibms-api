@@ -54,6 +54,7 @@ const testChambers = new Schema({
     maxTemp: Number, //in °C
     minTemp: Number, //in °C
     location: String,
+    maxNoOfChannels:Number,
     assignedUsers: {
       type: [
         {
@@ -91,6 +92,10 @@ const testChambers = new Schema({
           isConnected: Boolean,
         },
       ],
+    },
+    createdOn:{
+      type:Date,
+      default:Date.now
     }
   });
 

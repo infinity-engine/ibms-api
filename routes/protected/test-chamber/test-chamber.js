@@ -21,4 +21,33 @@ testChamberRoute.post('/',async (req,res)=>{
     }
 })
 
+testChamberRoute.get("/",async(req,res)=>{
+    try{
+        const chbrs = await getTestChambersForUser(req.user)
+        res.json(chbrs)
+    }catch(err){
+        console.log(err)
+        res.status(500)
+    }
+})
+async function getTestChambersForUser(user) {
+    const chamberIds = user.configuredChambers.map(chamber => chamber._id);
+  
+    const chambers = await TestChamber.find({
+      '_id': { $in: chamberIds }
+    })
+      .select('-testPerformed')
+      .lean();
+  
+    const updatedChambers = chambers.map(chamber => {
+      const access = user.configuredChambers.find(c => c._id.toString() === chamber._id.toString()).accessType;
+      let updatedChamber = { ...chamber, accessType: access };
+      if (access !== 'admin') {
+        delete updatedChamber.assignedUsers;
+      }
+      return updatedChamber;
+    });
+  
+    return updatedChambers;
+}
 module.exports = testChamberRoute
