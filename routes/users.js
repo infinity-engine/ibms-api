@@ -1,37 +1,33 @@
 const express = require("express");
-const User = require("./../models/schema");
 const userRouter = express.Router();
+const {USER} = require("./../models/schema");
 
-const mongoose = require("mongoose");
-function dbConnect(req, res, next) {
-  mongoose.connect(process.env.DB_URL_BASE + "/i_bms");
-  next();
-}
 
-userRouter.get("/",dbConnect, async (req, res) => {
+userRouter.get("/", async (req, res) => {
   try {
-    const user = await User.findOne({ sub: req.query.sub });
+    const user = await USER.findOne({ sub: req.query.sub });
     res.json(user);
   } catch (error) {
-    res.json({ message: error });
+    console.log("err",error)
+    res.status(500).json(error);
   }
 });
 
-userRouter.post("/",dbConnect, async (req, res) => {
+userRouter.post("/", async (req, res) => {
   try {
-    const user = await User.create({...req.body});
+    const user = await USER.create({...req.body});
     res.json(user);
   } catch (error) {
-    res.json({ message: error });
+    res.status(500).json(error);
   }
 });
 
-userRouter.delete("/",dbConnect, async (req, res) => {
+userRouter.delete("/", async (req, res) => {
   try {
-    const user = await User.deleteOne(req.body);
+    const user = await USER.deleteOne(req.body);
     res.json(user);
   } catch (error) {
-    res.json({ message: error });
+    res.status(500).json(error);
   }
 });
 
