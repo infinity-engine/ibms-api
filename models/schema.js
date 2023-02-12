@@ -54,7 +54,6 @@ const testChambers = new Schema({
     maxTemp: Number, //in °C
     minTemp: Number, //in °C
     location: String,
-    maxNoOfChannels:Number,
     assignedUsers: {
       type: [
         {
@@ -81,22 +80,28 @@ const testChambers = new Schema({
           },
           testResult: {
             type: mongoose.Schema.Types.Mixed,
+            default:null
           },
-          isComplete: Boolean,
-          testStartDate: Date,
+          isComplete: {type:Boolean,default:false},
+          testScheduleDate:Date,//expected to start at this time
+          testStartDate: Date,//actual start date, may be due to delay of network from chamber to cloud
           testEndDate: Date,
-          Status: {
+          createdOn:{type:Date,default:Date.now},
+          status: {
             type: String,
             enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
-          },
-          isConnected: Boolean,
+            default:'Scheduled'
+          }
         },
       ],
     },
     createdOn:{
       type:Date,
       default:Date.now
-    }
+    },
+    maxNoOfChannels:Number,
+    isConnected: {type:Boolean,default:false},
+    lastSeen:Date
   });
 
 const USER = mongoose.model("USER", users);

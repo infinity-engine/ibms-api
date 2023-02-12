@@ -69,8 +69,8 @@ const channelFieldsSchema = new Schema({
     required: true,
   },
   cellID: {
-    type: {_id:mongoose.Schema.Types.ObjectId,name:String},
-    required: true,
+    type: mongoose.Schema.Types.String,
+    required: false,//gotta change it later
   },
   testFormats: [testFormatSchema],
   overallRowMultiplier: {
