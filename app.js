@@ -6,6 +6,7 @@ const cors = require("cors");
 require("dotenv/config");
 const protectedRoute = require("./routes/protected/protected");
 
+
 const mongoose = require("mongoose");
 function dbConnect(req, res, next) {
   mongoose.connect(process.env.DB_URL_BASE + "/i_bms");
@@ -21,11 +22,11 @@ app.use(
 );
 app.use(bodyParser.json());
 
-app.use("/api",dbConnect)
+app.use("/api", dbConnect);
 
 app.use("/api/users", userRoute);
 
-app.use("/api/protected",protectedRoute)
+app.use("/api/protected", protectedRoute);
 
 app.listen(process.env.PORT, () => {
   console.log(`Listening on port ${process.env.PORT}`);
