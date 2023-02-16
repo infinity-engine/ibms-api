@@ -68,7 +68,7 @@ async function getTestChambersForUser(user) {
   const chambers = await TestChamber.find({
     _id: { $in: chamberIds },
   })
-    .select("-testPerformed")
+    .select("-testsPerformed")
     .lean();
 
   const updatedChambers = chambers.map((chamber) => {

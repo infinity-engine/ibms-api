@@ -22,6 +22,7 @@ const users = new Schema(
     email: String,
     email_verified: Boolean,
     sub: String,
+    picture:String,
     created_on: { type: Date, default: Date.now },
     configuredCells: {
       type: [accessSchema],
@@ -52,7 +53,7 @@ const testchambers = new Schema(
       type: [accessSchema],
       default: [],
     },
-    testPerformed: {
+    testsPerformed: {
       type: [
         {
           _id: {
@@ -125,7 +126,7 @@ const cells = new Schema(
       default: []
     },
     createdOn: { type: Date, default: Date.now },
-    tests: { type: [{ _id: mongoose.Schema.Types.ObjectId }], default: [] },
+    testsPerformed: { type: [{ _id: mongoose.Schema.Types.ObjectId }], default: [] },
   },
   { versionKey: false }
 );
