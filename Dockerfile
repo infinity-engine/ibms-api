@@ -1,15 +1,6 @@
 FROM node:14-slim
-
-# setup okteto message
-COPY bashrc /root/.bashrc
-
-WORKDIR /usr/src/app
-
-ADD package.json .
+WORKDIR /app
+COPY package.json /app
 RUN npm install
-
-COPY app.js .
-
-EXPOSE 8080
-
-CMD npm start
+COPY .  /app
+CMD ["npm","start"]
