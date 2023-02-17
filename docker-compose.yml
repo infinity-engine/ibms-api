@@ -9,8 +9,12 @@ services:
       - "8080:8080"
     environment:
       NODE_ENV: "production"
-    env_file:
-      - .env
+      PORT: 8080
+      DB_URL_BASE: mongodb+srv://m001-student:m001-mongodb-basics@sandbox.kc4te.mongodb.net
+      AUTH0_AUDIENCE: https://express.sample
+      AUTH0_DOMAIN: https://dev-n8d0f7yf.au.auth0.com/
+
+
     networks:
       - all
 
