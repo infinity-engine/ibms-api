@@ -1,8 +1,8 @@
-name: ibms-node-api
+name: my-node-api
 image: node:14-slim
 command: bash
-sync:
-  - .:/app
 forward:
   - 8080:8080
+sync:
+  - .:/app
 autocreate: true
