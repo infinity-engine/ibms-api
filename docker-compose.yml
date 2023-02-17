@@ -1,0 +1,22 @@
+version: '3.9'
+services:
+  app:
+    working_dir: /app
+    build: "./"
+    restart: always
+    command: ["npm","start"]
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: "production"
+    env_file:
+      - .env
+    networks:
+      - all
+
+
+networks:
+  all:
+    driver: bridge
+    driver_opts:
+      com.docker.network.enable_ipv6: "true"
