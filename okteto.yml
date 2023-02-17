@@ -1,0 +1,5 @@
+name: ibms-node-api
+image: ./
+command: npm start
+environment:
+  - PORT = 8080
