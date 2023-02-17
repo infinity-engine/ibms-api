@@ -6,8 +6,8 @@ const cors = require("cors");
 require("dotenv/config");
 const protectedRoute = require("./routes/protected/protected");
 
-
 const mongoose = require("mongoose");
+mongoose.set('strictQuery', false);
 function dbConnect(req, res, next) {
   mongoose.connect(process.env.DB_URL_BASE + "/i_bms");
   next();

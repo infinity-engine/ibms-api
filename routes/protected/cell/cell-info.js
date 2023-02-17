@@ -5,10 +5,10 @@ const cellInfoRoute = express.Router();
 
 cellInfoRoute.post("/", async (req, res) => {
   try {
-    const { cellQuantity, users, body } = req;
-    const { cellName } = body;
-    const q = cellQuantity || 1;
-    delete body.cellQuantity;
+    const q = req.body.cellQuantity || 1
+    const users = req.body.users
+    const body = req.body
+    const cellName = req.body.cellName
 
     const assignedUsers = (users || [])
       .filter(user => user._id !== req.user._id.toString())
