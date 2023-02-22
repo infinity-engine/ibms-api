@@ -52,15 +52,12 @@ testChamberRoute.get("/", async (req, res) => {
 });
 testChamberRoute.post("/create-test/", async (req, res) => {
   try {
-    //console.log(req.body.testConfig)
-    
     const chambers = await getChambersExceptReadAccess(req.user);
     if (chambers.find((e) => e == req.body.chamberId)) {
       const testConfig = await TestChamber.updateOne(
         { _id: mongoose.Types.ObjectId(req.body.chamberId) },
-        { $push: { testPerformed: req.body.testConfig } }
+        { $push: { testsPerformed: req.body.testConfig } }
       );
-      console.log(req.body.chamberId,testConfig)
       res.json(testConfig);
     } else {
       res.status(401).json("You don't have adequate access to this chamber");
