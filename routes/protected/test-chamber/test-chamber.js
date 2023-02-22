@@ -1,16 +1,17 @@
 const express = require("express");
 const { default: mongoose } = require("mongoose");
 const testChamberRoute = express.Router();
-const { TestChamber } = require("../../../models/schema");
-const { USER } = require("../../../models/schema");
+const { TestChamber, USER, ChamberAPI } = require("../../../models/schema");
+const crypto = require('crypto')
 
+//create a new test chamber
 testChamberRoute.post("/", async (req, res) => {
   try {
     const payload = {
       ...req.body,
       assignedUsers: [{ _id: req.user._id, accessType: "admin" }],
     };
-    console.log(payload);
+    //console.log(payload);
     const testChamber = await TestChamber.create(payload);
     USER.updateOne(
       { _id: req.user._id },
@@ -27,10 +28,16 @@ testChamberRoute.post("/", async (req, res) => {
         }
       }
     );
-
-    res.json(testChamber);
+    const api = await ChamberAPI.create({
+      apiKey: await generateUniqueCode(),
+      assignedChamber: {_id:testChamber._id,accessType:'admin'},
+      assignedUser:  req.user._id,
+    })
+    res.json({...testChamber.toObject(),apiKey:api.apiKey});
+    
   } catch (err) {
-    res.status(500).json(err);
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
   }
 });
 
@@ -40,25 +47,27 @@ testChamberRoute.get("/", async (req, res) => {
     res.json(chbrs);
   } catch (err) {
     console.log(err);
-    res.status(500);
+    res.status(500).json({ msg: "Error" });
   }
 });
 testChamberRoute.post("/create-test/", async (req, res) => {
   try {
     //console.log(req.body.testConfig)
+    
     const chambers = await getChambersExceptReadAccess(req.user);
     if (chambers.find((e) => e == req.body.chamberId)) {
       const testConfig = await TestChamber.updateOne(
         { _id: mongoose.Types.ObjectId(req.body.chamberId) },
         { $push: { testPerformed: req.body.testConfig } }
       );
+      console.log(req.body.chamberId,testConfig)
       res.json(testConfig);
     } else {
       res.status(401).json("You don't have adequate access to this chamber");
     }
   } catch (err) {
     console.log(err);
-    res.status(500);
+    res.status(500).json({ msg: "Error" });
   }
 });
 
@@ -93,4 +102,20 @@ async function getChambersExceptReadAccess(user) {
   });
   return chmbrs;
 }
+
+
+async function generateUniqueCode() {
+  let apiKey = crypto.randomBytes(20).toString("hex");
+  let existing = await ChamberAPI.findOne({ apiKey: apiKey });
+  if (existing) {
+    // If a document with the same API key value already exists,
+    // generate a new API key value and check again
+    return generateUniqueCode();
+  } else {
+    // If a unique API key value is found, return it
+    return apiKey;
+  }
+}
 module.exports = testChamberRoute;
+
+

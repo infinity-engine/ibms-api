@@ -5,7 +5,7 @@ const cellTemplatesRoute = require("./cell/cell-templates");
 const cellInfoRoute = require("./cell/cell-info");
 const assignedUsers = require("./assign/users")
 
-const { checkJwt, getSub } = require("../../Authz/authz");
+const { checkJwt, getSub } = require("../../middleware/Authz/authz");
 
 protectedRoute.use(checkJwt, getSub);
 protectedRoute.use("/test-chamber", testChamberRoute);

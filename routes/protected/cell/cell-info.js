@@ -32,8 +32,8 @@ cellInfoRoute.post("/", async (req, res) => {
 
     res.json({ msg: "success" });
   } catch (err) {
-    console.error(err);
-    res.status(500);
+    console.log(err);
+    res.status(500).json({msg:"Error"});
   }
 });
 
@@ -44,7 +44,7 @@ cellInfoRoute.get("/", async (req, res) => {
     res.json(updatedCells);
   } catch (err) {
     console.log(err);
-    res.status(500);
+    res.status(500).json({msg:"Error"});
   }
 });
 async function getCellsForUser(user) {

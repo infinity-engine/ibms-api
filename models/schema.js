@@ -2,14 +2,17 @@ const mongoose = require("mongoose");
 const { Schema } = mongoose;
 const { payLoadSchema } = require("./testConfigSchema");
 
-const accessSchema = new Schema({
-  _id: { type: mongoose.Schema.Types.ObjectId, required: true },
-  accessType: {
-    type: String,
-    required: true,
-    enum: ["admin", "write", "read"],
+const accessSchema = new Schema(
+  {
+    _id: { type: mongoose.Schema.Types.ObjectId, required: true },
+    accessType: {
+      type: String,
+      required: true,
+      enum: ["admin", "write", "read"],
+    },
   },
-},{versionKey:false});
+  { versionKey: false }
+);
 
 const users = new Schema(
   {
@@ -22,11 +25,11 @@ const users = new Schema(
     email: String,
     email_verified: Boolean,
     sub: String,
-    picture:String,
+    picture: String,
     created_on: { type: Date, default: Date.now },
     configuredCells: {
       type: [accessSchema],
-      default: []
+      default: [],
     },
     configuredChambers: {
       type: [accessSchema],
@@ -85,7 +88,10 @@ const testchambers = new Schema(
       type: Date,
       default: Date.now,
     },
-    maxNoOfChannels: Number,
+    maxNoOfChannels: {
+      type:Number,
+      default:1
+    },
     isConnected: { type: Boolean, default: false },
     lastSeen: Date,
   },
@@ -123,17 +129,45 @@ const cells = new Schema(
     minVolt: { type: Number },
     assignedUsers: {
       type: [accessSchema],
-      default: []
+      default: [],
     },
     createdOn: { type: Date, default: Date.now },
-    testsPerformed: { type: [{ _id: mongoose.Schema.Types.ObjectId }], default: [] },
+    testsPerformed: {
+      type: [{ _id: mongoose.Schema.Types.ObjectId }],
+      default: [],
+    },
   },
   { versionKey: false }
 );
+
+const chamberapi = new Schema({
+  apiKey: {
+    type: String,
+    unique: true,
+    required: true,
+  },
+  assignedUser: {
+    type: Schema.Types.ObjectId,
+    unique: false,
+    required: true,
+  },
+  assignedChamber: {
+    type: accessSchema,
+    unique: false,
+    required: false,
+  },
+  createdOn:{
+    type:Date,
+    default:Date.now
+  }
+},{versionKey:false});
+
+
 
 const USER = mongoose.model("USER", users);
 const TestChamber = mongoose.model("TestChamber", testchambers);
 const CellTemplate = mongoose.model("CellTemplate", celltemplates);
 const Cell = mongoose.model("Cell", cells);
+const ChamberAPI = mongoose.model("chamberAPI", chamberapi);
 
-module.exports = { USER, TestChamber, CellTemplate, Cell };
+module.exports = { USER, TestChamber, CellTemplate, Cell, ChamberAPI };

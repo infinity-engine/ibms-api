@@ -1,7 +1,7 @@
 const { auth } = require("express-oauth2-jwt-bearer");
 require("dotenv/config");
 const jsonWebToken = require("jsonwebtoken");
-const {USER} = require('../models/schema')
+const {USER} = require('../../models/schema')
 
 const checkJwt = auth({
   audience: process.env.AUTH0_AUDIENCE,
