@@ -30,9 +30,8 @@ isAnyExperimentRouter.get("/", checkAccess, async (req, res) => {
         },
       },
     ]);
-    console.log(result);
     const testConfig = result[0]?.testConfig;
-    res.json("ok")
+    res.json(testConfig)
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
