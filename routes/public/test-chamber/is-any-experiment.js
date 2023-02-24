@@ -8,7 +8,7 @@ isAnyExperimentRouter.get("/", checkAccess, async (req, res) => {
   try {
     //console.log(req.assignedChamberId);
     const currentDate = new Date();
-    TestChamber.aggregate([
+    const result = await TestChamber.aggregate([
       { $match: { _id: mongoose.Types.ObjectId(req.assignedChamberId) } },
       { $unwind: "$testsPerformed" },
       {
@@ -35,13 +35,12 @@ isAnyExperimentRouter.get("/", checkAccess, async (req, res) => {
           testScheduleDate: 1,
         },
       },
-    ]).then((result) => {
-      const testConfig = result[0].testConfig;
-      //tests are exported as queue first schedule first out
-      res.json(testConfig);
-      console.log(getOutput(testConfig))
-      //getOutput(testConfig);
-    });
+    ]);
+    const testConfig = result[0].testConfig;
+    //tests are exported as queue first schedule first out
+    res.json(testConfig);
+    //console.log(getOutput(testConfig));
+    //getOutput(testConfig);
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
@@ -52,7 +51,6 @@ async function getOutput(testConfig) {
   if (testConfig) {
     const testConfigOut = { channels: [] };
     for (let channel of testConfig.channels) {
-      
       const config = {};
       const channelInfoDefault = {
         channelNumber: null,
@@ -77,6 +75,7 @@ async function getOutput(testConfig) {
       config.steps = steps;
       config.info = channelInfo;
       testConfigOut.channels.push(config);
+      console.log(config);
     }
     return testConfigOut;
   } else {
@@ -107,7 +106,7 @@ function getSteps(testFormats, steps) {
 function getStep_1(testFormat, step) {
   step.multiplier = testFormat.multiplier ? testFormat.multiplier : 1;
   step.ambTemp = testFormat.ambTemp ? testFormat.ambTemp : null;
-  const fields = testFormat.children[0].fields;
+  const fields = testFormat.fields;
   let field = fields[0];
   if (field.id == 1) {
     if (field.value == "Charge") {

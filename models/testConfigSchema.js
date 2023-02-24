@@ -38,8 +38,7 @@ const fileFieldSchema = new mongoose.Schema({
   template_width: { type: Number, required: true },
 });
 
-const fieldsSchema = new mongoose.Schema({
-  id: { type: Number, required: true },
+const testFormatSchema = new mongoose.Schema({
   fields: [
     {
       type: mongoose.Schema.Types.Mixed,
@@ -53,10 +52,6 @@ const fieldsSchema = new mongoose.Schema({
       },
     },
   ],
-});
-
-const testFormatSchema = new mongoose.Schema({
-  children: [fieldsSchema],
   name: { type: String, required: true },
   value: { type: Number, required: true },
   multiplier: { type: Number, required: true },
