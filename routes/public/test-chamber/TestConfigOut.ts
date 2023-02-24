@@ -17,6 +17,8 @@ interface Step {
   resVal: number | null;
   powVal: number | null;
   timeLimit: number | null;
+  voltLimit: number | null;
+  total_n_samples:number | null;
   multiplier: number | null;
   ambTemp: number | null;
   holdVolt: number | null;
@@ -37,6 +39,7 @@ const myConfig = {
           resVal: null,
           powVal: null,
           timeLimit: 60,
+          voltLimit:null,
           multiplier: 1,
           ambTemp: null,
           holdVolt: null,

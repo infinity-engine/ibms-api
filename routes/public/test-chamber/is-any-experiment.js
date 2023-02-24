@@ -38,30 +38,20 @@ isAnyExperimentRouter.get("/", checkAccess, async (req, res) => {
     ]);
     const testConfig = result[0].testConfig;
     //tests are exported as queue first schedule first out
-    res.json(testConfig);
-    //console.log(getOutput(testConfig));
-    //getOutput(testConfig);
+    res.json(getOutput(testConfig));
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
   }
 });
 
-async function getOutput(testConfig) {
+function getOutput(testConfig) {
   if (testConfig) {
     const testConfigOut = { channels: [] };
     for (let channel of testConfig.channels) {
       const config = {};
-      const channelInfoDefault = {
-        channelNumber: null,
-        testId: null,
-        overallMultiplier: null,
-        isConAmTe: null,
-        ambTemp: null,
-        noOfSubExp: null,
-      };
+
       const channelInfo = {
-        ...channelInfoDefault,
         channelNumber: channel.channelNumber,
         testId: `${testConfig._id.toString()}_${channel.channelNumber}`,
         overallMultiplier: channel.overallRowMultiplier,
@@ -73,9 +63,8 @@ async function getOutput(testConfig) {
       const steps = [];
       getSteps(channel.testFormats, steps);
       config.steps = steps;
-      config.info = channelInfo;
+      config.info = correctInfo(channelInfo);
       testConfigOut.channels.push(config);
-      console.log(config);
     }
     return testConfigOut;
   } else {
@@ -100,12 +89,12 @@ function getSteps(testFormats, steps) {
         getStep_3(testFormat, step);
         break;
     }
-    steps.push(step);
+    step.multiplier = testFormat.multiplier;
+    step.ambTemp = testFormat.ambTemp;
+    steps.push(correctStep(step));
   }
 }
 function getStep_1(testFormat, step) {
-  step.multiplier = testFormat.multiplier ? testFormat.multiplier : 1;
-  step.ambTemp = testFormat.ambTemp ? testFormat.ambTemp : null;
   const fields = testFormat.fields;
   let field = fields[0];
   if (field.id == 1) {
@@ -134,6 +123,57 @@ function getStep_1(testFormat, step) {
     step.timeLimit = timeLimit;
   }
 }
-function getStep_2(testFormat, step) {}
-function getStep_3(testFormat, step) {}
+function getStep_2(testFormat, step) {
+  const fields = testFormat.fields;
+  let field = fields[0];
+  if (field.id == 1) {
+    if (field.value == "Charge") {
+      // insert the logic for unit conversion from C/W to A
+      step.mode = 1;
+      step.currentRate = fields[2].value;
+    } else if (field.value == "Discharge") {
+      step.mode = 2;
+      step.currentRate = fields[2].value;
+    }
+  }
+  field = fields[5];
+  step.voltLimit = field.value;
+}
+function getStep_3(testFormat, step) {
+  const fields = testFormat.fields;
+  let field = fields[3];
+  let timeLimit = fields[4].value;
+  if (field.value == "seconds.") {
+    step.timeLimit = timeLimit;
+  } else if (field.value == "kms.") {
+    //insert the clculation for it
+  }
+}
+function correctStep(step) {
+  const step_ = {
+    mode: null,
+    currentRate: null,
+    resVal: null,
+    powVal: null,
+    timeLimit: null,
+    voltLimit: null,
+    total_n_samples: null,
+    multiplier: 1,
+    ambTemp: 25,
+    holdVolt: null,
+  };
+  const modifiedStep = { ...step_, ...step };
+  return modifiedStep;
+}
+function correctInfo(channelInfo) {
+  const channelInfoDefault = {
+    channelNumber: null,
+    testId: null,
+    overallMultiplier: null,
+    isConAmTe: null,
+    ambTemp: null,
+    noOfSubExp: null,
+  };
+  return { ...channelInfoDefault, ...channelInfo };
+}
 module.exports = isAnyExperimentRouter;
