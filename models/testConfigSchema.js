@@ -30,10 +30,25 @@ const inputFieldSchema = new mongoose.Schema({
   template_width: { type: Number, required: true },
 });
 
+const driveCycleSchema = new Schema({
+  time: {
+    type: [Number],
+    required: true,
+  },
+  current: {
+    type: [Number],
+    required: false,
+  },
+  power: {
+    type: [Number],
+    required: false,
+  },
+});
+
 const fileFieldSchema = new mongoose.Schema({
   type: { type: String, default: "file" },
   id: { type: Number, required: true },
-  value: { type: mongoose.Schema.Types.Mixed, required: true },
+  value: { type: driveCycleSchema, required: true },
   visibility: { type: Boolean, required: true },
   template_width: { type: Number, required: true },
 });
@@ -65,7 +80,7 @@ const channelFieldsSchema = new Schema({
   },
   cellID: {
     type: mongoose.Schema.Types.String,
-    required: false,//gotta change it later
+    required: false, //gotta change it later
   },
   testFormats: [testFormatSchema],
   overallRowMultiplier: {

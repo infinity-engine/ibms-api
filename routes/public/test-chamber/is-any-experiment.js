@@ -37,6 +37,7 @@ isAnyExperimentRouter.get("/", checkAccess, async (req, res) => {
       },
     ]);
     const testConfig = result[0].testConfig;
+    testConfig.testId = result[0]._id;
     //tests are exported as queue first schedule first out
     res.json(getOutput(testConfig));
   } catch (err) {
@@ -47,7 +48,7 @@ isAnyExperimentRouter.get("/", checkAccess, async (req, res) => {
 
 function getOutput(testConfig) {
   if (testConfig) {
-    const testConfigOut = { channels: [] };
+    const testConfigOut = { channels: [] ,testId:testConfig.testId};
     for (let channel of testConfig.channels) {
       const config = {};
 
