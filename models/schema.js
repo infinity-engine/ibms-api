@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 const { payLoadSchema } = require("./testConfigSchema");
+const testResultSchema = require("./testResultSchema");
 
 const accessSchema = new Schema(
   {
@@ -68,8 +69,7 @@ const testchambers = new Schema(
             type: payLoadSchema,
           },
           testResult: {
-            type: mongoose.Schema.Types.Mixed,
-            default: null,
+            type: testResultSchema
           },
           isComplete: { type: Boolean, default: false },
           testScheduleDate: Date, //expected to start at this time
