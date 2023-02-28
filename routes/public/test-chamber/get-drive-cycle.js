@@ -41,7 +41,7 @@ getDriveCycleRoute.get("/", checkAccess, async (req, res) => {
 
       res.send(convertIntoCSV(driveCycle));
     } else {
-      res.send(null);
+      res.json(null);
     }
   } catch (err) {
     console.log(err);
@@ -74,11 +74,11 @@ function getDriveCycle(testConfig, channelNo, rowNo) {
   if (!testConfig) {
     return null;
   }
-  if (channelNo - 1 > testConfig.channels.length) {
+  if (channelNo > testConfig.channels.length) {
     return null;
   }
   const channel = testConfig.channels[channelNo - 1];
-  if (rowNo - 1 > channel.testFormats.length) {
+  if (rowNo > channel.testFormats.length) {
     return null;
   }
   const testFormat = channel.testFormats[rowNo - 1];
