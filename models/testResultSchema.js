@@ -39,7 +39,7 @@ const rowSchema = new Schema(
 );
 const testResultSchema = new Schema(
   {
-    type: { channels: [{ rows: rowSchema, channelNo: Number }] },
+    type: { channels: [{ rows: rowSchema, channelNo: Number }]}
   },
   { versionKey: false }
 );

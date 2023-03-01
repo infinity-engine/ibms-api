@@ -11,7 +11,7 @@ getDriveCycleRoute.get("/", checkAccess, async (req, res) => {
     //console.log(req.query);
 
     const result = await TestChamber.aggregate([
-      { $match: { _id: mongoose.Types.ObjectId(req.assignedChamberId) } },
+      { $match: { _id: req.assignedChamberId } },
       { $unwind: "$testsPerformed" },
       {
         $match: {

@@ -69,12 +69,13 @@ const testchambers = new Schema(
             type: payLoadSchema,
           },
           testResult: {
-            type: testResultSchema
+            type: testResultSchema,
+            default: null
           },
           isComplete: { type: Boolean, default: false },
           testScheduleDate: Date, //expected to start at this time
           testStartDate: Date, //actual start date, may be due to delay of network from chamber to cloud
-          testEndDate: Date,
+          testEndDate: Date,//could be completed, or stopped date
           createdOn: { type: Date, default: Date.now },
           status: {
             type: String,
