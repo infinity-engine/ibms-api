@@ -12,7 +12,7 @@ const {
 
 feedExpResultRoute.use(checkAccess);
 
-async function checkIfExpRunning(req, res, next) {
+function checkIfExpRunning(req, res, next) {
   try {
     TestChamber.aggregate(
       [
@@ -38,7 +38,7 @@ async function checkIfExpRunning(req, res, next) {
         if (err) {
           throw new Error("Status Check Failed");
         } else {
-          if (result[0].status === 'Running') {
+          if (result[0]?.status === 'Running') {
             next();
           } else {
             res
@@ -50,7 +50,7 @@ async function checkIfExpRunning(req, res, next) {
     );
   } catch (err) {
     console.log(err);
-    res.status(500).json({ status: "failed", msg: "Error" });
+    res.status(500).json({ status: "failed", msg: "Exp status check failed." });
   }
 }
 
@@ -90,7 +90,7 @@ feedExpResultRoute.get("/set-status", async (req, res) => {
         ) {
           test.testEndDate = Date.now();
           test.isComplete = true;
-          await closeDoorAll(req.assignedChamberId,req.query.testId)
+          closeDoorAll(req.assignedChamberId,req.query.testId)
         }
       }else{
         res.json({status:"failed",msg:"test is closed!"})
@@ -122,7 +122,7 @@ feedExpResultRoute.get("/set-status", async (req, res) => {
     }
   } catch (err) {
     console.log(err);
-    res.status(500).json({ status: "failed", msg: "Error" });
+    res.status(500).json({ status: "failed", msg: "status update failed." });
   }
 });
 
@@ -140,7 +140,7 @@ feedExpResultRoute.get("/updated-upto", async (req, res) => {
     );
   } catch (err) {
     console.log(err);
-    res.status(500).json({ status: "failed", msg: "Error" });
+    res.status(500).json({ status: "failed", msg: "update upto status fetch failed" });
   }
 });
 
@@ -294,7 +294,6 @@ feedExpResultRoute.get(
     }
   }
 );
-
 function formNewRow(rowId, measurements) {
   const { current, voltage, chTemp, chHum, cellTemp, time } = measurements;
   const measurement = new MeasuredParameters({
@@ -526,7 +525,7 @@ async function getLastUpdateStatus(chamberId, testId, channel) {
     }
     const row = ch.rows[ch.rows.length - 1];
     defaultRes.chNo = channel;
-    defaultRes.isChCl = channel.isClosed;
+    defaultRes.isChCl = ch.isClosed;
     defaultRes.rowNo = row.rowNo;
     defaultRes.isRowCl = row.isClosed;
     defaultRes.lastTime =
