@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 const { payLoadSchema } = require("./testConfigSchema");
-const testResultSchema = require("./testResultSchema");
+const {testResultSchema} = require("./testResultSchema");
 
 const accessSchema = new Schema(
   {

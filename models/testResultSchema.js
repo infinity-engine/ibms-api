@@ -1,47 +1,41 @@
-const { mongoose } = require("mongoose");
+const { mongoose, mongo } = require("mongoose");
 const { Schema } = mongoose;
-const measurementSchema = new Schema(
-  {
-    type: { time: [Number], value: [Number] },
-    default: { time: [], value: [] },
-  },
-  { versionKey: false }
-);
-const cellTempMeasurementSchema = new Schema(
-  {
-    type: { time: [Number], value: [[Number]] },
-    default: { time: [], value: [] },
-  },
-  { versionKey: false }
-);
+
 const measuredParametersSchema = new Schema(
   {
-    current: measurementSchema,
-    voltage: measurementSchema,
-    chamberTemp: measurementSchema,
-    chamberHum: measurementSchema,
-    cellTemp: cellTempMeasurementSchema,
+    current: [Number],
+    voltage: [Number],
+    chamberTemp: [Number],
+    chamberHum: [Number],
+    cellTemp: [[Number]],
+    time:[Number]
   },
   { versionKey: false }
 );
-
-const rowSchema = new Schema(
+const rowInfoSchema = new Schema(
   {
-    type: [
-      {
-        rowNo: Number,
-        measuredParameters: measuredParametersSchema,
-        derivedParameters: {type:mongoose.Schema.Types.Mixed},
-      },
-    ],
+    rowNo: Number,
+    measuredParameters: measuredParametersSchema,
+    derivedParameters: { type: mongoose.Schema.Types.Mixed },
+    isClosed: { type: Boolean, default: false },
+  },
+  { versionKey: false }
+);
+const channelSchema = new Schema(
+  {
+    rows: [rowInfoSchema],
+    channelNo: Number,
+    isClosed: { type: Boolean, default: false },
   },
   { versionKey: false }
 );
 const testResultSchema = new Schema(
   {
-    type: { channels: [{ rows: rowSchema, channelNo: Number }]}
+    channels: [channelSchema]
   },
   { versionKey: false }
 );
-
-module.exports = testResultSchema;
+const RowInfo = mongoose.model('RowInfo',rowInfoSchema);
+const MeasuredParameters = mongoose.model('MeasuredParameters',measuredParametersSchema);
+const Channel = mongoose.model('Channel',channelSchema);
+module.exports = {RowInfo,MeasuredParameters,Channel,testResultSchema};

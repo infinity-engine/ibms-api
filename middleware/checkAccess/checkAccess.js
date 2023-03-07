@@ -19,7 +19,7 @@ async function checkAccess(req, res, next) {
     }
   } catch (err) {
     console.log(err);
-    res.status(401).json({ msg: "error" });
+    res.status(401).json({status:"failed", msg: "error" });
   }
 }
 
