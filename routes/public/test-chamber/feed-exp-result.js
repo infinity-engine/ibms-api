@@ -38,7 +38,7 @@ function checkIfExpRunning(req, res, next) {
         if (err) {
           throw new Error("Status Check Failed");
         } else {
-          if (result[0]?.status === 'Running') {
+          if (result[0]?.status === "Running") {
             next();
           } else {
             res
@@ -55,76 +55,148 @@ function checkIfExpRunning(req, res, next) {
 }
 
 feedExpResultRoute.get("/set-status", async (req, res) => {
+  if (
+    await setStatusExp(
+      req.assignedChamberId,
+      mongoose.Types.ObjectId(req.query.testId),
+      req.query.status,
+      +req.query.channel,
+      +req.query.row
+    )
+  ) {
+    res.json({ status: "ok" });
+  } else {
+    res.status(500).json({ status: "failed" });
+  }
+});
+
+async function setStatusExp(
+  chamberId,
+  testId,
+  status,
+  channelNo = undefined,
+  rowNo = undefined
+) {
+  //will set status for all channel, and their last rows
   try {
-    const results = await TestChamber.aggregate([
-      { $match: { _id: req.assignedChamberId } },
+    const [testInfo] = await TestChamber.aggregate([
+      { $match: { _id: chamberId } },
       { $unwind: "$testsPerformed" },
-      {
-        $match: {
-          "testsPerformed._id": mongoose.Types.ObjectId(req.query.testId),
-        },
-      },
+      { $match: { "testsPerformed._id": testId } },
       {
         $group: {
           _id: "$testsPerformed._id",
           status: { $first: "$testsPerformed.status" },
-          testStartDate: { $first: "$testsPerfomed.testStartDate" },
+          testScheduleDate: { $first: "$testsPerformed.testStartDate" },
+          testStartDate: { $first: "$testsPerformed.testStartDate" },
           testEndDate: { $first: "$testsPerformed.testEndDate" },
-          isComplete: { $first: "$testsPerfomed.testEndDate" },
+          testResult: { $first: "$testsPerformed.testResult" },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          status: 1,
+          testScheduleDate: 1,
+          testStartDate: 1,
+          testEndDate: 1,
+          "testResult.channels.channelNo": 1,
+          "testResult.channels.status": 1,
+          "testResult.channels.rows.rowNo": 1,
+          "testResult.channels.rows.status": 1,
         },
       },
     ]);
-    const test = results[0];
-    if (test) {
-      if (test.status !== "Stopped" && test.status !== "Completed") {
-        if (req.query.status == "Stopped") {
-          test.testEndDate = Date.now();
-        } else if (
-          req.query.status === "Running" &&
-          test.status !== "Running"
-        ) {
-          test.testStartDate = Date.now();
-        } else if (
-          req.query.status === "Completed" &&
-          test.status !== "Completed"
-        ) {
-          test.testEndDate = Date.now();
-          test.isComplete = true;
-          closeDoorAll(req.assignedChamberId,req.query.testId)
-        }
-      }else{
-        res.json({status:"failed",msg:"test is closed!"})
-        return
-      }
-      test.status = req.query.status;
-      const r = await TestChamber.updateOne(
-        {
-          _id: req.assignedChamberId
-        },
-        {
-          $set: {
-            "testsPerformed.$[test].status": test.status,
-            "testsPerformed.$[test].testStartDate": test.testStartDate,
-            "testsPerformed.$[test].testEndDate": test.testEndDate,
-            "testsPerformed.$[test].isComplete": test.isComplete,
-          },
-        },{
-          arrayFilters:[{"test._id":mongoose.Types.ObjectId(req.query.testId)}]
-        }
-      );
-      if (r.acknowledged === true) {
-        res.json({ status: "ok"});
-      } else {
-        res.json({ status: "failed" });
-      }
-    } else {
-      res.json({ status: "failed" });
+    if (!testInfo) {
+      return false;
     }
+    if (testInfo.status === "Completed" || testInfo.status === "Stopped") {
+      return false;
+    }
+    //changes are allowed only if test isn't completed and stopped
+    if (
+      status === "Running" &&
+      Date.now() > testInfo.testScheduleDate &&
+      testInfo.status !== "Running"
+    ) {
+      //only when schedule date is past to current date
+      testInfo.status = "Running";
+      testInfo.testStartDate = Date.now();
+    } else if (status === "Stopped" || status === "Completed") {
+      testInfo.status = status;
+      testInfo.testEndDate = Date.now();
+    } else if (status === "Paused") {
+      testInfo.status = status;
+    } else {
+      return false;
+    }
+
+    //update the status
+    let update = {
+      "testsPerformed.$[test].status": testInfo.status,
+      "testsPerformed.$[test].testStartDate": testInfo.testStartDate,
+      "testsPerformed.$[test].testEndDate": testInfo.testEndDate,
+      "testsPerformed.$[test].testResult.channels.$[channel].status":
+        testInfo.status,
+      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].status":
+        testInfo.status,
+    };
+    let filters = [{ "test._id": testId }];
+
+    if (rowNo && channelNo) {
+      //if a specific rowNo and channelNo is given, that means your'e asked to change the status of the
+      // particular row of a channel
+      delete update["testsPerformed.$[test].status"];
+      delete update["testsPerformed.$[test].testStartDate"];
+      delete update["testsPerformed.$[test].testEndDate"];
+      delete update[
+        "testsPerformed.$[test].testResult.channels.$[channel].status"
+      ];
+
+      filters.push(
+        {
+          "channel.channelNo": channelNo,
+          "channel.status": { $nin: ["Completed", "Stopped"] },
+        },
+        { "row.rowNo": rowNo, "row.status": { $nin: ["Completed", "Stopped"] } }
+      );
+    } else if (channelNo) {
+      //if only channelNo is given the last row as well as the channel will be updated,
+      //on the assumption that, for a test to continue on the next row, the previous row has to be completed,
+      //also, row will only be formed when it is in running status, hence there will be no row in scheduled status
+      delete update["testsPerformed.$[test].status"];
+      delete update["testsPerformed.$[test].testStartDate"];
+      delete update["testsPerformed.$[test].testEndDate"];
+      filters.push(
+        {
+          "channel.channelNo": channelNo,
+          "channel.status": { $nin: ["Completed", "Stopped"] },
+        },
+        { "row.status": { $nin: ["Completed", "Stopped"] } }
+      );
+    } else {
+      filters.push(
+        {
+          "channel.status": { $nin: ["Completed", "Stopped"] },
+        },
+        { "row.status": { $nin: ["Completed", "Stopped"] } }
+      );
+    }
+    let res = await TestChamber.updateOne(
+      { _id: chamberId },
+      { $set: update },
+      { arrayFilters: filters }
+    );
+    console.log(res);
+    if (!res.acknowledged || res.modifiedCount < 1) {
+      return false;
+    }
+    return true;
   } catch (err) {
     console.log(err);
-    res.status(500).json({ status: "failed", msg: "status update failed." });
+    return false;
   }
-});
+}
 
 feedExpResultRoute.get("/updated-upto", async (req, res) => {
   //give a update on how much data are already updated to the cloud,
@@ -135,12 +207,14 @@ feedExpResultRoute.get("/updated-upto", async (req, res) => {
       await getLastUpdateStatus(
         req.assignedChamberId,
         req.query.testId,
-        req.query.channel
+        +req.query.channel
       )
     );
   } catch (err) {
     console.log(err);
-    res.status(500).json({ status: "failed", msg: "update upto status fetch failed" });
+    res
+      .status(500)
+      .json({ status: "failed", msg: "update upto status fetch failed" });
   }
 });
 
@@ -177,15 +251,14 @@ feedExpResultRoute.post(
             if (err) {
               throw new Error("new row creation failed");
             } else {
-              console.log(result);
+              //console.log(result);
               res.json({ status: "ok" });
             }
           }
         );
-      } else if (status.isChCl) {
-        res.json({ status: "failed" });
-        return;
-      } else if (status.isRowCl) {
+      } else if (status.statusCh !== "Running") {
+        res.json({ status: "failed", msg: "channel's status must be running" });
+      } else if (status.statusRow === "Completed") {
         //open new Row for insreting measurement
         const newRow = formNewRow(status.rowNo + 1, req.body);
         TestChamber.updateOne(
@@ -211,14 +284,15 @@ feedExpResultRoute.post(
           }
         );
       } else {
-        const identity = [
-          req.assignedChamberId,
-          req.query.testId,
-          channel,
-          status.rowNo,
-        ];
+        const identity = {
+          chamberId:req.assignedChamberId,
+          testId:mongoose.Types.ObjectId(req.query.testId),
+          channelNo:channel,
+          rowNo:status.rowNo,
+        };
         insertMeasurement(identity, req.body)
           .then((results) => {
+            //console.log(results)
             res.json({ status: "ok" });
           })
           .catch((err) => {
@@ -233,67 +307,6 @@ feedExpResultRoute.post(
   }
 );
 
-feedExpResultRoute.get(
-  "/close-door-ch",
-  checkIfExpRunning,
-  async (req, res) => {
-    try {
-      const status = await getLastUpdateStatus(
-        req.assignedChamberId,
-        req.query.testId,
-        +req.query.channel
-      );
-      if (status) {
-        const closeChRes = await closeDoorCh(
-          req.assignedChamberId,
-          req.query.testId,
-          +req.query.channel
-        );
-        const closeRwRes = await closeDoorRow(
-          req.assignedChamberId,
-          req.query.testId,
-          +req.query.channel,
-          status.rowNo
-        );
-        console.log(closeChRes, closeRwRes);
-        res.json({ status: "ok" });
-      } else {
-        res.json({ status: "failed" });
-      }
-    } catch (err) {
-      console.log(err);
-      res.status(500).json({ status: "failed", msg: "Error" });
-    }
-  }
-);
-feedExpResultRoute.get(
-  "/close-door-row",
-  checkIfExpRunning,
-  async (req, res) => {
-    try {
-      const status = await getLastUpdateStatus(
-        req.assignedChamberId,
-        req.query.testId,
-        +req.query.channel
-      );
-      if (status) {
-        const closeRwRes = await closeDoorRow(
-          req.assignedChamberId,
-          req.query.testId,
-          +req.query.channel,
-          status.rowNo
-        );
-        console.log(closeRwRes);
-        res.json({ status: "ok" });
-      } else {
-        res.json({ status: "failed" });
-      }
-    } catch (err) {
-      console.log(err);
-      res.status(500).json({ status: "failed", msg: "Error" });
-    }
-  }
-);
 function formNewRow(rowId, measurements) {
   const { current, voltage, chTemp, chHum, cellTemp, time } = measurements;
   const measurement = new MeasuredParameters({
@@ -312,187 +325,52 @@ function formNewRow(rowId, measurements) {
 }
 
 function insertMeasurement(identity, measurements) {
-  const allPromises = [];
+  const updates = {};
   if (measurements.voltage) {
-    allPromises.push(insertVoltage(...identity, measurements.voltage));
+    updates[
+      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.voltage"
+    ] = { $each: measurements.voltage };
   }
   if (measurements.current) {
-    allPromises.push(insertCurrent(...identity, measurements.current));
+    updates[
+      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.current"
+    ] = { $each: measurements.current };
   }
   if (measurements.chTemp) {
-    allPromises.push(insertChTemp(...identity, measurements.chTemp));
+    updates[
+      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.chTemp"
+    ] = { $each: measurements.chTemp };
   }
   if (measurements.chHum) {
-    allPromises.push(insertChHum(...identity, measurements.chHum));
+    updates[
+      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.chHum"
+    ] = { $each: measurements.chHum };
   }
   if (measurements.time) {
-    allPromises.push(insertTime(...identity, measurements.time));
+    updates[
+      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.time"
+    ] = { $each: measurements.time };
   }
   if (measurements.cellTemp) {
-    allPromises.push(insertCellTemp(...identity, measurements.cellTemp));
+    updates[
+      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.cellTemp"
+    ] = { $each: measurements.cellTemp };
   }
-  return Promise.all(allPromises);
-}
-
-function insertVoltage(chamberId, testId, channelNo, rowNo, voltages) {
   return TestChamber.updateOne(
-    { _id: chamberId },
+    { _id: identity.chamberId },
     {
-      $push: {
-        "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.voltage":
-          { $each: voltages },
-      },
+      $push: updates,
     },
     {
       arrayFilters: [
-        { "test._id": mongoose.Types.ObjectId(testId) },
-        { "channel.channelNo": channelNo },
-        { "row.rowNo": rowNo },
+        { "test._id": identity.testId },
+        { "channel.channelNo": identity.channelNo },
+        { "row.rowNo": identity.rowNo },
       ],
     }
   );
 }
 
-function insertCurrent(chamberId, testId, channelNo, rowNo, currents) {
-  return TestChamber.updateOne(
-    { _id: chamberId },
-    {
-      $push: {
-        "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.current":
-          { $each: currents },
-      },
-    },
-    {
-      arrayFilters: [
-        { "test._id": mongoose.Types.ObjectId(testId) },
-        { "channel.channelNo": channelNo },
-        { "row.rowNo": rowNo },
-      ],
-    }
-  );
-}
-
-function insertChTemp(chamberId, testId, channelNo, rowNo, chTemps) {
-  return TestChamber.updateOne(
-    { _id: chamberId },
-    {
-      $push: {
-        "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.chamberTemp":
-          { $each: chTemps },
-      },
-    },
-    {
-      arrayFilters: [
-        { "test._id": mongoose.Types.ObjectId(testId) },
-        { "channel.channelNo": channelNo },
-        { "row.rowNo": rowNo },
-      ],
-    }
-  );
-}
-
-function insertChHum(chamberId, testId, channelNo, rowNo, chHums) {
-  return TestChamber.updateOne(
-    { _id: chamberId },
-    {
-      $push: {
-        "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.chamberHum":
-          { $each: chHums },
-      },
-    },
-    {
-      arrayFilters: [
-        { "test._id": mongoose.Types.ObjectId(testId) },
-        { "channel.channelNo": channelNo },
-        { "row.rowNo": rowNo },
-      ],
-    }
-  );
-}
-
-function insertCellTemp(chamberId, testId, channelNo, rowNo, cellTemps) {
-  return TestChamber.updateOne(
-    { _id: chamberId },
-    {
-      $push: {
-        "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.cellTemp":
-          { $each: cellTemps },
-      },
-    },
-    {
-      arrayFilters: [
-        { "test._id": mongoose.Types.ObjectId(testId) },
-        { "channel.channelNo": channelNo },
-        { "row.rowNo": rowNo },
-      ],
-    }
-  );
-}
-
-function insertTime(chamberId, testId, channelNo, rowNo, times) {
-  return TestChamber.updateOne(
-    { _id: chamberId },
-    {
-      $push: {
-        "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.time":
-          { $each: times },
-      },
-    },
-    {
-      arrayFilters: [
-        { "test._id": mongoose.Types.ObjectId(testId) },
-        { "channel.channelNo": channelNo },
-        { "row.rowNo": rowNo },
-      ],
-    }
-  );
-}
-
-async function closeDoorCh(chamberId, testId, channelNo) {
-  const response = await TestChamber.updateOne(
-    { _id: chamberId },
-    { "testsPerformed.$[test].testResult.channels.$[channel].isClosed": true },
-    {
-      arrayFilters: [
-        { "test._id": mongoose.Types.ObjectId(testId) },
-        { "channel.channelNo": channelNo },
-      ],
-    }
-  );
-  return response;
-}
-
-async function closeDoorRow(chamberId, testId, channelNo, rowNo) {
-  const response = await TestChamber.updateOne(
-    { _id: chamberId },
-    {
-      $set: {
-        "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].isClosed": true,
-      },
-    },
-    {
-      arrayFilters: [
-        { "test._id": mongoose.Types.ObjectId(testId) },
-        { "channel.channelNo": channelNo },
-        { "row.rowNo": rowNo },
-      ],
-    }
-  );
-  return response;
-}
-async function closeDoorAll(chamberId, testId) {
-  const response = await TestChamber.updateOne(
-    { _id: chamberId },
-    {
-      $set: {
-        "testsPerformed.$[test].testResult.channels.$[].isClosed": true,
-        "testsPerformed.$[test].testResult.channels.$[].rows.$[].isClosed": true,
-      },
-    },
-    {arrayFilters:[{"test._id":mongoose.Types.ObjectId(testId)}]}
-  );
-  return response
-}
 async function getLastUpdateStatus(chamberId, testId, channel) {
   //{chNo:n,isChCom:Boolean,rowNo:n,isRowCom:Boolean,lastTime:RelativeTime}
   const results = await TestChamber.aggregate([
@@ -511,11 +389,11 @@ async function getLastUpdateStatus(chamberId, testId, channel) {
     },
   ]);
   const testResult = results[0].testResult;
-  const defaultRes = {
+  let defaultRes = {
     chNo: undefined,
-    isChCl: false,
+    statusCh: undefined,
     rowNo: undefined,
-    isRowCl: false,
+    statusRow: undefined,
     lastTime: 0,
   };
   if (testResult) {
@@ -525,9 +403,9 @@ async function getLastUpdateStatus(chamberId, testId, channel) {
     }
     const row = ch.rows[ch.rows.length - 1];
     defaultRes.chNo = channel;
-    defaultRes.isChCl = ch.isClosed;
+    defaultRes.statusCh = ch.status;
     defaultRes.rowNo = row.rowNo;
-    defaultRes.isRowCl = row.isClosed;
+    defaultRes.statusRow = row.status;
     defaultRes.lastTime =
       row.measuredParameters.time[row.measuredParameters.time.length - 1];
   } else {

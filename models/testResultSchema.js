@@ -8,7 +8,7 @@ const measuredParametersSchema = new Schema(
     chamberTemp: [Number],
     chamberHum: [Number],
     cellTemp: [[Number]],
-    time:[Number]
+    time: [Number],
   },
   { versionKey: false }
 );
@@ -17,7 +17,11 @@ const rowInfoSchema = new Schema(
     rowNo: Number,
     measuredParameters: measuredParametersSchema,
     derivedParameters: { type: mongoose.Schema.Types.Mixed },
-    isClosed: { type: Boolean, default: false },
+    status: {
+      type: String,
+      enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
+      default: "Running",
+    },
   },
   { versionKey: false }
 );
@@ -25,17 +29,24 @@ const channelSchema = new Schema(
   {
     rows: [rowInfoSchema],
     channelNo: Number,
-    isClosed: { type: Boolean, default: false },
+    status: {
+      type: String,
+      enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
+      default: "Running",
+    },
   },
   { versionKey: false }
 );
 const testResultSchema = new Schema(
   {
-    channels: [channelSchema]
+    channels: {type:[channelSchema],default:[]},
   },
   { versionKey: false }
 );
-const RowInfo = mongoose.model('RowInfo',rowInfoSchema);
-const MeasuredParameters = mongoose.model('MeasuredParameters',measuredParametersSchema);
-const Channel = mongoose.model('Channel',channelSchema);
-module.exports = {RowInfo,MeasuredParameters,Channel,testResultSchema};
+const RowInfo = mongoose.model("RowInfo", rowInfoSchema);
+const MeasuredParameters = mongoose.model(
+  "MeasuredParameters",
+  measuredParametersSchema
+);
+const Channel = mongoose.model("Channel", channelSchema);
+module.exports = { RowInfo, MeasuredParameters, Channel, testResultSchema };
