@@ -2,39 +2,39 @@ const express = require("express");
 const { default: mongoose } = require("mongoose");
 const testChamberRoute = express.Router();
 const { TestChamber, USER, ChamberAPI } = require("../../../models/schema");
-const crypto = require('crypto')
+const crypto = require("crypto");
 
 //create a new test chamber
 testChamberRoute.post("/", async (req, res) => {
   try {
+    const assignedUsers = [];
+    assignedUsers.push({ _id: req.user._id, accessType: "admin" });
+    if (req.body.assignedUsers) {
+      const userIdStr = req.user._id.toString();
+      req.body.assignedUsers.forEach((user) => {
+        if (user._id !== userIdStr) {
+          assignedUsers.push({
+            _id: mongoose.Types.ObjectId(user._id),
+            accessType: user.accessType,
+          });
+        }
+      });
+    }
     const payload = {
       ...req.body,
-      assignedUsers: [{ _id: req.user._id, accessType: "admin" }],
+      assignedUsers: assignedUsers,
     };
     //console.log(payload);
     const testChamber = await TestChamber.create(payload);
-    USER.updateOne(
-      { _id: req.user._id },
-      {
-        $push: {
-          configuredChambers: { _id: testChamber._id, accessType: "admin" },
-        },
-      },
-      (err) => {
-        if (err) {
-          res
-            .status(500)
-            .json("failed to give the user access to this test chameber");
-        }
-      }
-    );
-    const api = await ChamberAPI.create({
-      apiKey: await generateUniqueCode(),
-      assignedChamber: {_id:testChamber._id,accessType:'admin'},
-      assignedUser:  req.user._id,
-    })
-    res.json({...testChamber.toObject(),apiKey:api.apiKey});
-    
+
+    if (!updateChamberAccessOnUser(testChamber._id, assignedUsers)) {
+      throw new Error("failed to provide access to the users");
+    }
+
+    res.json({
+      ...testChamber.toObject(),
+      apiKey: await generateAPIKey(testChamber._id, assignedUsers),
+    });
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
@@ -100,6 +100,26 @@ async function getChambersExceptReadAccess(user) {
   return chmbrs;
 }
 
+async function generateAPIKey(chamberId, assignedUsers) {
+  try {
+    let apiKey = undefined;
+    for (let user of assignedUsers) {
+      const api = await ChamberAPI.create([
+        {
+          apiKey: await generateUniqueCode(),
+          assignedChamber: { _id: chamberId, accessType: user.accessType },
+          assignedUser: user._id,
+        },
+      ]);
+      if (user.accessType === "admin") {
+        apiKey = api[0].apiKey;
+      }
+    }
+    return apiKey;
+  } catch (err) {
+    console.log(err);
+  }
+}
 
 async function generateUniqueCode() {
   let apiKey = crypto.randomBytes(20).toString("hex");
@@ -113,6 +133,26 @@ async function generateUniqueCode() {
     return apiKey;
   }
 }
+
+async function updateChamberAccessOnUser(chamberId, assignedUsers) {
+  try {
+    const updateOps = assignedUsers.map((user) => ({
+      updateOne: {
+        filter: { _id: user._id },
+        update: {
+          $push: {
+            configuredChambers: { _id: chamberId, accessType: user.accessType },
+          },
+        },
+      },
+    }));
+
+    await USER.bulkWrite(updateOps);
+    return true;
+  } catch (err) {
+    console.log(err);
+    return false;
+  }
+}
+
 module.exports = testChamberRoute;
-
-
