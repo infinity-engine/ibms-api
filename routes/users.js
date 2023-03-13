@@ -7,7 +7,7 @@ userRouter.get("/", async (req, res) => {
     const user = await USER.findOne({ sub: req.query.sub });
     res.json(user);
   } catch (error) {
-    console.log(err);
+    console.log(error);
     res.status(500).json({ msg: "Error" });
   }
 });

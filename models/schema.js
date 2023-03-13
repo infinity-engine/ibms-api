@@ -92,7 +92,6 @@ const testchamber = new Schema(
       type:Number,
       default:1
     },
-    isConnected: { type: Boolean, default: false },
     lastSeen: Date,
   },
   { versionKey: false }

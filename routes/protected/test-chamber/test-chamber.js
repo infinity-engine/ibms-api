@@ -41,15 +41,34 @@ testChamberRoute.post("/", async (req, res) => {
   }
 });
 
+//get list of test chamber
 testChamberRoute.get("/", async (req, res) => {
   try {
     const chbrs = await getTestChambersForUser(req.user);
+    const assignedUsers = [];
+    for (let chbr of chbrs) {
+      if (chbr.assignedUsers) {
+        assignedUsers.push(...chbr.assignedUsers);
+      }
+    }
+    const users_ = await getUserAdditionalInfo(
+      assignedUsers.map((user) => user._id)
+    );
+    for (let chbr of chbrs) {
+      if (chbr.assignedUsers) {
+        chbr.assignedUsers = chbr.assignedUsers.map((user) => {
+          let name = users_.find((u) => u._id.toString() == user._id.toString())?.name;
+          return { _id: user._id, name: name, accessType: user.accessType };
+        });
+      }
+    }
     res.json(chbrs);
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
   }
 });
+
 testChamberRoute.post("/create-test/", async (req, res) => {
   try {
     const chambers = await getChambersExceptReadAccess(req.user);
@@ -90,6 +109,7 @@ async function getTestChambersForUser(user) {
 
   return updatedChambers;
 }
+
 async function getChambersExceptReadAccess(user) {
   let chmbrs = [];
   user.configuredChambers.forEach((element) => {
@@ -154,5 +174,16 @@ async function updateChamberAccessOnUser(chamberId, assignedUsers) {
     return false;
   }
 }
-
+async function getUserAdditionalInfo(assignedUsers) {
+  try {
+    const users = USER.find({ _id: { $in: assignedUsers } }).select({
+      _id: 1,
+      name: 1,
+    });
+    return users.lean();
+  } catch (err) {
+    console.log(err);
+    return null;
+  }
+}
 module.exports = testChamberRoute;

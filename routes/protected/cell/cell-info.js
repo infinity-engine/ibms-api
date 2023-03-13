@@ -63,6 +63,7 @@ cellInfoRoute.get("/", async (req, res) => {
     res.status(500).json({ msg: "Error" });
   }
 });
+
 cellInfoRoute.post("/for-experiment", async (req, res) => {
   try {
     const updatedCells = await getCellsForUser(req.user,true,req.body.searchStr);
@@ -72,6 +73,7 @@ cellInfoRoute.post("/for-experiment", async (req, res) => {
     res.status(500).json({ msg: "Error" });
   }
 });
+
 async function getCellsForUser(user, forExperiment = false,searchStr = undefined) {
   let res = await USER.findOne({ _id: user._id }).select("+configuredCells");
   const cellsAssigned = res.configuredCells;
