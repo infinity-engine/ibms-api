@@ -56,8 +56,27 @@ cellInfoRoute.post("/", async (req, res) => {
 
 cellInfoRoute.get("/", async (req, res) => {
   try {
-    const updatedCells = await getCellsForUser(req.user);
-    res.json(updatedCells);
+    const cells = await getCellsForUser(req.user);
+    const assignedUsers = [];
+    for (let cell of cells) {
+      if (cell.assignedUsers) {
+        assignedUsers.push(...cell.assignedUsers);
+      }
+    }
+    const users_ = await getUserAdditionalInfo(
+      assignedUsers.map((user) => user._id)
+    );
+    for (let cell of cells) {
+      if (cell.assignedUsers) {
+        cell.assignedUsers = cell.assignedUsers.map((user) => {
+          let name = users_.find(
+            (u) => u._id.toString() == user._id.toString()
+          )?.name;
+          return { _id: user._id, name: name, accessType: user.accessType };
+        });
+      }
+    }
+    res.json(cells);
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
@@ -66,7 +85,11 @@ cellInfoRoute.get("/", async (req, res) => {
 
 cellInfoRoute.post("/for-experiment", async (req, res) => {
   try {
-    const updatedCells = await getCellsForUser(req.user,true,req.body.searchStr);
+    const updatedCells = await getCellsForUser(
+      req.user,
+      true,
+      req.body.searchStr
+    );
     res.json(updatedCells);
   } catch (err) {
     console.log(err);
@@ -74,7 +97,7 @@ cellInfoRoute.post("/for-experiment", async (req, res) => {
   }
 });
 
-async function getCellsForUser(user, forExperiment = false,searchStr = undefined) {
+async function getCellsForUser(user, forExperiment = false, searchStr = "") {
   let res = await USER.findOne({ _id: user._id }).select("+configuredCells");
   const cellsAssigned = res.configuredCells;
   const cellIds = [];
@@ -87,7 +110,10 @@ async function getCellsForUser(user, forExperiment = false,searchStr = undefined
       cellIds.push(cell._id);
     }
   }
-  const cells = await Cell.find({ _id: { $in: cellIds },cellName:{$regex:searchStr,$options:'i'} })
+  const cells = await Cell.find({
+    _id: { $in: cellIds },
+    cellName: { $regex: searchStr, $options: "i" },
+  })
     .select("-testsPerformed")
     .lean();
   const updatedCells = cells.map((cell) => {
@@ -101,5 +127,17 @@ async function getCellsForUser(user, forExperiment = false,searchStr = undefined
     return updatedCell;
   });
   return updatedCells;
+}
+async function getUserAdditionalInfo(assignedUsers) {
+  try {
+    const users = USER.find({ _id: { $in: assignedUsers } }).select({
+      _id: 1,
+      name: 1,
+    });
+    return users.lean();
+  } catch (err) {
+    console.log(err);
+    return null;
+  }
 }
 module.exports = cellInfoRoute;
