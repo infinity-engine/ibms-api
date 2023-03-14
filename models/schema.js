@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 const { payLoadSchema } = require("./testConfigSchema");
+const {testResultSchema} = require("./testResultSchema");
 
 const accessSchema = new Schema(
   {
@@ -14,7 +15,7 @@ const accessSchema = new Schema(
   { versionKey: false }
 );
 
-const users = new Schema(
+const user = new Schema(
   {
     //_id: ObjectId, not required as it is added by default by mongoose
     given_name: String,
@@ -43,7 +44,7 @@ const users = new Schema(
   { versionKey: false }
 );
 
-const testchambers = new Schema(
+const testchamber = new Schema(
   {
     name: String,
     controller: String,
@@ -68,13 +69,12 @@ const testchambers = new Schema(
             type: payLoadSchema,
           },
           testResult: {
-            type: mongoose.Schema.Types.Mixed,
-            default: null,
+            type: testResultSchema,
+            default: null
           },
-          isComplete: { type: Boolean, default: false },
           testScheduleDate: Date, //expected to start at this time
           testStartDate: Date, //actual start date, may be due to delay of network from chamber to cloud
-          testEndDate: Date,
+          testEndDate: Date,//could be completed, or stopped date
           createdOn: { type: Date, default: Date.now },
           status: {
             type: String,
@@ -92,13 +92,12 @@ const testchambers = new Schema(
       type:Number,
       default:1
     },
-    isConnected: { type: Boolean, default: false },
     lastSeen: Date,
   },
   { versionKey: false }
 );
 
-const celltemplates = new Schema(
+const celltemplate = new Schema(
   {
     templateName: { type: String, required: true },
     manufacturer: String,
@@ -114,7 +113,7 @@ const celltemplates = new Schema(
   { versionKey: false }
 );
 
-const cells = new Schema(
+const cell = new Schema(
   {
     cellName: { type: String },
     manufacturer: { type: String },
@@ -161,13 +160,13 @@ const chamberapi = new Schema({
     default:Date.now
   }
 },{versionKey:false});
+chamberapi.index({apiKey:1},{background:true})
 
 
-
-const USER = mongoose.model("USER", users);
-const TestChamber = mongoose.model("TestChamber", testchambers);
-const CellTemplate = mongoose.model("CellTemplate", celltemplates);
-const Cell = mongoose.model("Cell", cells);
+const USER = mongoose.model("USER", user);
+const TestChamber = mongoose.model("TestChamber", testchamber);
+const CellTemplate = mongoose.model("CellTemplate", celltemplate);
+const Cell = mongoose.model("Cell", cell);
 const ChamberAPI = mongoose.model("chamberAPI", chamberapi);
 
 module.exports = { USER, TestChamber, CellTemplate, Cell, ChamberAPI };
