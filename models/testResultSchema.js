@@ -22,6 +22,11 @@ const rowInfoSchema = new Schema(
       enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
       default: "Running",
     },
+    currentMultiplierIndex: {
+      type: Number,
+      default: 1,
+    },
+    multiplier: Number,
   },
   { versionKey: false }
 );
@@ -34,12 +39,17 @@ const channelSchema = new Schema(
       enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
       default: "Running",
     },
+    currentMultiplierIndex: {
+      type: Number,
+      default: 1,
+    },
+    multiplier: Number,
   },
   { versionKey: false }
 );
 const testResultSchema = new Schema(
   {
-    channels: {type:[channelSchema],default:[]},
+    channels: { type: [channelSchema], default: [] },
   },
   { versionKey: false }
 );

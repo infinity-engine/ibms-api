@@ -91,10 +91,6 @@ const channelFieldsSchema = new Schema({
 
 const payLoadSchema = new mongoose.Schema({
   channels: [channelFieldsSchema],
-  testId: {
-    type: Number,
-    required: false,
-  },
   testName: {
     type: String,
     required: false,
