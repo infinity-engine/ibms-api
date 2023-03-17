@@ -57,12 +57,73 @@ testChamberRoute.get("/", async (req, res) => {
     for (let chbr of chbrs) {
       if (chbr.assignedUsers) {
         chbr.assignedUsers = chbr.assignedUsers.map((user) => {
-          let name = users_.find((u) => u._id.toString() == user._id.toString())?.name;
+          let name = users_.find(
+            (u) => u._id.toString() == user._id.toString()
+          )?.name;
           return { _id: user._id, name: name, accessType: user.accessType };
         });
       }
     }
     res.json(chbrs);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+testChamberRoute.get("/live-tests", async (req, res) => {
+  //gives the list of tests that are on live;
+  try {
+    const chamberIds = req.user.configuredChambers.map(
+      (chamber) => chamber._id
+    );
+    const tests = await TestChamber.aggregate([
+      { $match: { _id: { $in: chamberIds } } },
+      { $unwind: "$testsPerformed" },
+      { $match: { "testsPerformed.status": { $in: ["Running", "Paused"] } } },
+      {
+        $group: {
+          _id: "$testsPerformed._id",
+          chamberName: { $first: "$name" },
+          testName: { $first: "$testsPerformed.testConfig.testName" },
+          status: { $first: "$testsPerformed.status" },
+          testConfig: { $first: "$testsPerformed.testConfig" },
+          testResult: { $first: "$testsPerformed.testResult" },
+        },
+      },
+      {
+        $project: {
+          "testResult.channels.rows.measuredParameters": 0,
+          "testResult.channels.rows.derivedParameters": 0,
+        },
+      },
+    ]);
+    if (!tests) {
+      res.json([]);
+    }
+    tests.forEach((test) => {
+      test.channels = test.testResult.channels.map((ch) => {
+        let totalRows = test.testConfig.channels.find(
+          (ch_) => ch_.channelNumber == ch.channelNo
+        )?.testFormats?.length;
+        return {
+          channelNo: ch.channelNo,
+          statusCh: ch.status,
+          chMultiplierIndex: ch.currentMultiplierIndex,
+          chMultiplier: ch.multiplier,
+          onRows: ch.rows.length,
+          totalRows: totalRows,
+          statusRow: ch.rows[ch.rows.length - 1].status,
+          rowMultiplierIndex:
+            ch.rows[ch.rows.length - 1].currentMultiplierIndex,
+          rowMultiplier: ch.rows[ch.rows.length - 1].multiplier,
+        };
+      });
+      delete test.testConfig;
+      delete test.testResult;
+    });
+    //console.log(tests);
+    res.json(tests);
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
