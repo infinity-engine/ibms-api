@@ -85,6 +85,7 @@ testChamberRoute.get("/live-tests", async (req, res) => {
         $group: {
           _id: "$testsPerformed._id",
           chamberName: { $first: "$name" },
+          chamberId: { $first: "$_id" },
           testName: { $first: "$testsPerformed.testConfig.testName" },
           status: { $first: "$testsPerformed.status" },
           testConfig: { $first: "$testsPerformed.testConfig" },
@@ -124,6 +125,66 @@ testChamberRoute.get("/live-tests", async (req, res) => {
     });
     //console.log(tests);
     res.json(tests);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+testChamberRoute.post("/test-data", async (req, res) => {
+  try {
+    if (!(req.body.testId && req.body.chamberId)) {
+      throw new Error("testId or chamberId isn't received.");
+    }
+    const chamber = req.user.configuredChambers.find(
+      (cham) => cham._id.toString() === req.body.chamberId
+    );
+    if (!chamber) {
+      throw new Error("Test Chamber not found.");
+    }
+    const testId = mongoose.Types.ObjectId(req.body.testId);
+    const chamberId = chamber._id;
+    const testData = await TestChamber.aggregate([
+      { $match: { _id: chamberId } },
+      { $unwind: "$testsPerformed" },
+      { $match: { "testsPerformed._id": testId } },
+      {
+        $group: {
+          _id: "$testsPerformed._id",
+          chamberName: { $first: "$name" },
+          chamberId: { $first: "$_id" },
+          testName: { $first: "$testsPerformed.testConfig.testName" },
+          status: { $first: "$testsPerformed.status" },
+          testConfig: { $first: "$testsPerformed.testConfig" },
+          testResult: { $first: "$testsPerformed.testResult" },
+        },
+      },
+    ]);
+    if (testData && testData.length > 0) {
+      testData[0].accessType = chamber.accessType;
+      const testInfo = testData[0];
+      let configAndData = {};
+      configAndData.isConAmTe = testInfo.testConfig.isConAmTe;
+      configAndData.ambTemp = testInfo.testConfig.ambTemp;
+      let channels = [];
+      testInfo.testConfig.channels.forEach((ch) => {
+        let channel = { ...ch };
+        delete channel["_id"];
+        channel.multiplier = channel["overallRowMultiplier"];
+        delete channel["overallRowMultiplier"];
+        let chRes = testInfo.testResult.channels.find(
+          (ch_) => ch_.channelNo == ch.channelNumber
+        );
+        channel.status = chRes?.status;
+        channel.rows = chRes?.rows;
+        channel.currentMultiplierIndex = chRes?.currentMultiplierIndex;
+        channels.push(channel);
+      });
+      testInfo.channels = channels;
+      delete testInfo.testConfig;
+      delete testInfo.testResult;
+      res.json(testInfo);
+    }
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });

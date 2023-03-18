@@ -53,6 +53,7 @@ const testResultSchema = new Schema(
   },
   { versionKey: false }
 );
+
 const RowInfo = mongoose.model("RowInfo", rowInfoSchema);
 const MeasuredParameters = mongoose.model(
   "MeasuredParameters",
