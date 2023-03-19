@@ -17,6 +17,8 @@ const rowInfoSchema = new Schema(
     rowNo: Number,
     measuredParameters: measuredParametersSchema,
     derivedParameters: { type: mongoose.Schema.Types.Mixed },
+    rowStartDate: { type: Date, default: Date.now },
+    rowEndDate: Date,
     status: {
       type: String,
       enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
@@ -39,6 +41,8 @@ const channelSchema = new Schema(
       enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
       default: "Running",
     },
+    chStartDate: { type: Date, default: Date.now },
+    chEndDate: Date,
     currentMultiplierIndex: {
       type: Number,
       default: 1,

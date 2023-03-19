@@ -157,6 +157,9 @@ testChamberRoute.post("/test-data", async (req, res) => {
           status: { $first: "$testsPerformed.status" },
           testConfig: { $first: "$testsPerformed.testConfig" },
           testResult: { $first: "$testsPerformed.testResult" },
+          testStartDate: { $first: "$testsPerformed.testStartDate" },
+          testScheduleDate: { $first: "$testsPerformed.testScheduleDate" },
+          testEndDate: { $first: "$testsPerformed.testEndDate" },
         },
       },
     ]);
@@ -178,6 +181,8 @@ testChamberRoute.post("/test-data", async (req, res) => {
         channel.status = chRes?.status;
         channel.rows = chRes?.rows;
         channel.currentMultiplierIndex = chRes?.currentMultiplierIndex;
+        channel.chStartDate = chRes?.chStartDate;
+        channel.chEndDate = chRes?.chEndDate;
         channels.push(channel);
       });
       testInfo.channels = channels;

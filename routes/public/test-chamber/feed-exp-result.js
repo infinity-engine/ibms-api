@@ -78,6 +78,9 @@ async function setStatusExp(
   rowNo = undefined
 ) {
   //will set status for all channel, and their last rows
+  //when ever a new row or channel is added to the testResult
+  //by default it is set to 'Running'
+  //hence you should not be using this function to change status of row/channel to 'Running'
   try {
     const [testInfo] = await TestChamber.aggregate([
       { $match: { _id: chamberId } },
@@ -114,32 +117,19 @@ async function setStatusExp(
       return false;
     }
     //changes are allowed only if test isn't completed and stopped
-    if (
-      status === "Running" &&
-      Date.now() > testInfo.testScheduleDate &&
-      testInfo.status !== "Running"
-    ) {
-      //only when schedule date is past to current date
-      testInfo.status = "Running";
-      testInfo.testStartDate = Date.now();
-    } else if (status === "Stopped" || status === "Completed") {
-      testInfo.status = status;
-      testInfo.testEndDate = Date.now();
-    } else if (status === "Paused") {
-      testInfo.status = status;
-    } else {
-      return false;
-    }
 
     //update the status
     let update = {
-      "testsPerformed.$[test].status": testInfo.status,
-      "testsPerformed.$[test].testStartDate": testInfo.testStartDate,
-      "testsPerformed.$[test].testEndDate": testInfo.testEndDate,
-      "testsPerformed.$[test].testResult.channels.$[channel].status":
-        testInfo.status,
+      "testsPerformed.$[test].status": status,
+      "testsPerformed.$[test].testStartDate": Date.now(),
+      "testsPerformed.$[test].testEndDate": Date.now(),
+      "testsPerformed.$[test].testResult.channels.$[channel].status": status,
+      "testsPerformed.$[test].testResult.channels.$[channel].chEndDate":
+        Date.now(),
       "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].status":
-        testInfo.status,
+        status,
+      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].rowEndDate":
+        Date.now(),
     };
     let filters = [{ "test._id": testId }];
 
@@ -152,6 +142,14 @@ async function setStatusExp(
       delete update[
         "testsPerformed.$[test].testResult.channels.$[channel].status"
       ];
+      delete update[
+        "testsPerformed.$[test].testResult.channels.$[channel].chEndDate"
+      ];
+      if (status !== "Completed") {
+        delete update[
+          "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].rowEndDate"
+        ];
+      }
 
       filters.push(
         {
@@ -164,9 +162,19 @@ async function setStatusExp(
       //if only channelNo is given the last row as well as the channel will be updated,
       //on the assumption that, for a test to continue on the next row, the previous row has to be completed,
       //also, row will only be formed when it is in running status, hence there will be no row in scheduled status
+
       delete update["testsPerformed.$[test].status"];
       delete update["testsPerformed.$[test].testStartDate"];
       delete update["testsPerformed.$[test].testEndDate"];
+      if (!(status === "Completed" || status === "Stopped")) {
+        //only completed,and stopped
+        delete update[
+          "testsPerformed.$[test].testResult.channels.$[channel].chEndDate"
+        ];
+        delete update[
+          "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].rowEndDate"
+        ];
+      }
       filters.push(
         {
           "channel.channelNo": channelNo,
@@ -175,6 +183,23 @@ async function setStatusExp(
         { "row.status": { $nin: ["Completed", "Stopped"] } }
       );
     } else {
+      //update all, all the channel and last-rows within
+      if (
+        status === "Running" &&
+        Date.now() > testInfo.testScheduleDate &&
+        testInfo.status !== "Running"
+      ) {
+        //only when schedule date is past to current date
+        delete update["testsPerformed.$[test].testEndDate"];
+      } else if (status === "Stopped" || status === "Completed") {
+        delete update["testsPerformed.$[test].testStartDate"];
+      } else if (status === "Paused") {
+        delete update["testsPerformed.$[test].testEndDate"];
+        delete update["testsPerformed.$[test].testStartDate"];
+      } else {
+        return false;
+      }
+
       filters.push(
         {
           "channel.status": { $nin: ["Completed", "Stopped"] },
