@@ -17,11 +17,18 @@ const rowInfoSchema = new Schema(
     rowNo: Number,
     measuredParameters: measuredParametersSchema,
     derivedParameters: { type: mongoose.Schema.Types.Mixed },
+    rowStartDate: { type: Date, default: Date.now },
+    rowEndDate: Date,
     status: {
       type: String,
       enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
       default: "Running",
     },
+    currentMultiplierIndex: {
+      type: Number,
+      default: 1,
+    },
+    multiplier: Number,
   },
   { versionKey: false }
 );
@@ -34,15 +41,23 @@ const channelSchema = new Schema(
       enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
       default: "Running",
     },
+    chStartDate: { type: Date, default: Date.now },
+    chEndDate: Date,
+    currentMultiplierIndex: {
+      type: Number,
+      default: 1,
+    },
+    multiplier: Number,
   },
   { versionKey: false }
 );
 const testResultSchema = new Schema(
   {
-    channels: {type:[channelSchema],default:[]},
+    channels: { type: [channelSchema], default: [] },
   },
   { versionKey: false }
 );
+
 const RowInfo = mongoose.model("RowInfo", rowInfoSchema);
 const MeasuredParameters = mongoose.model(
   "MeasuredParameters",

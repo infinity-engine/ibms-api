@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 const { payLoadSchema } = require("./testConfigSchema");
-const {testResultSchema} = require("./testResultSchema");
+const { testResultSchema } = require("./testResultSchema");
 
 const accessSchema = new Schema(
   {
@@ -70,16 +70,27 @@ const testchamber = new Schema(
           },
           testResult: {
             type: testResultSchema,
-            default: null
+            default: { channels: [] },
           },
           testScheduleDate: Date, //expected to start at this time
           testStartDate: Date, //actual start date, may be due to delay of network from chamber to cloud
-          testEndDate: Date,//could be completed, or stopped date
+          testEndDate: Date, //could be completed, or stopped date
           createdOn: { type: Date, default: Date.now },
           status: {
             type: String,
             enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
             default: "Scheduled",
+          },
+          forcedStatus: {
+            type: String | null,
+            enum: [
+              "Completed",
+              "Running",
+              "Scheduled",
+              "Stopped",
+              "Paused",
+              null,
+            ],
           },
         },
       ],
@@ -89,8 +100,12 @@ const testchamber = new Schema(
       default: Date.now,
     },
     maxNoOfChannels: {
-      type:Number,
-      default:1
+      type: Number,
+      default: 1,
+    },
+    isConnected: {
+      type: Boolean,
+      default: false,
     },
     lastSeen: Date,
   },
@@ -139,29 +154,31 @@ const cell = new Schema(
   { versionKey: false }
 );
 
-const chamberapi = new Schema({
-  apiKey: {
-    type: String,
-    unique: true,
-    required: true,
+const chamberapi = new Schema(
+  {
+    apiKey: {
+      type: String,
+      unique: true,
+      required: true,
+    },
+    assignedUser: {
+      type: Schema.Types.ObjectId,
+      unique: false,
+      required: true,
+    },
+    assignedChamber: {
+      type: accessSchema,
+      unique: false,
+      required: false,
+    },
+    createdOn: {
+      type: Date,
+      default: Date.now,
+    },
   },
-  assignedUser: {
-    type: Schema.Types.ObjectId,
-    unique: false,
-    required: true,
-  },
-  assignedChamber: {
-    type: accessSchema,
-    unique: false,
-    required: false,
-  },
-  createdOn:{
-    type:Date,
-    default:Date.now
-  }
-},{versionKey:false});
-chamberapi.index({apiKey:1},{background:true})
-
+  { versionKey: false }
+);
+chamberapi.index({ apiKey: 1 }, { background: true });
 
 const USER = mongoose.model("USER", user);
 const TestChamber = mongoose.model("TestChamber", testchamber);
