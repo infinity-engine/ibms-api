@@ -522,15 +522,15 @@ function insertMeasurement(identity, measurements) {
       "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.current"
     ] = { $each: measurements.current };
   }
-  if (measurements.chTemp) {
+  if (measurements.chamberTemp) {
     updates[
-      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.chTemp"
-    ] = { $each: measurements.chTemp };
+      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.chamberTemp"
+    ] = { $each: measurements.chamberTemp };
   }
-  if (measurements.chHum) {
+  if (measurements.chamberHum) {
     updates[
-      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.chHum"
-    ] = { $each: measurements.chHum };
+      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.chamberHum"
+    ] = { $each: measurements.chamberHum };
   }
   if (measurements.time) {
     updates[

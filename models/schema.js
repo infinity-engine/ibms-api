@@ -81,6 +81,17 @@ const testchamber = new Schema(
             enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
             default: "Scheduled",
           },
+          forcedStatus: {
+            type: String | null,
+            enum: [
+              "Completed",
+              "Running",
+              "Scheduled",
+              "Stopped",
+              "Paused",
+              null,
+            ],
+          },
         },
       ],
     },
