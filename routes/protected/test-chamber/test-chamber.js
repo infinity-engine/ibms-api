@@ -155,6 +155,7 @@ testChamberRoute.post("/get-test-data", async (req, res) => {
           chamberId: { $first: "$_id" },
           testName: { $first: "$testsPerformed.testConfig.testName" },
           status: { $first: "$testsPerformed.status" },
+          forcedStatus: { $first: "$testsPerformed.forcedStatus" },
           testConfig: { $first: "$testsPerformed.testConfig" },
           testResult: { $first: "$testsPerformed.testResult" },
           testStartDate: { $first: "$testsPerformed.testStartDate" },
@@ -198,6 +199,39 @@ testChamberRoute.post("/get-test-data", async (req, res) => {
     } else {
       throw new Error("Not found!");
     }
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+testChamberRoute.post("/force-status", async (req, res) => {
+  try {
+    if (
+      !(
+        req.body.testId &&
+        req.body.chamberId &&
+        req.body.forcedStatus !== undefined
+      )
+    ) {
+      throw new Error("testId or chamberId isn't received.");
+    }
+    const chamber = req.user.configuredChambers.find(
+      (cham) => cham._id.toString() === req.body.chamberId
+    );
+    if (!chamber) {
+      throw new Error("Test Chamber not found.");
+    }
+    const testId = mongoose.Types.ObjectId(req.body.testId);
+    const chamberId = chamber._id;
+    const forcedStatus = req.body.forcedStatus;
+
+    const result = await TestChamber.updateOne(
+      { _id: chamberId },
+      { $set: { "testsPerformed.$[test].forcedStatus": forcedStatus } },
+      { arrayFilters: [{ "test._id": testId }] }
+    );
+    res.json(result);
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });

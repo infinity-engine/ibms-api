@@ -1,7 +1,7 @@
 const { mongoose, mongo } = require("mongoose");
 const { Schema } = mongoose;
 
-const tempObj = new Schema(
+const sensorObj = new Schema(
   {
     sensorId: Number,
     values: [Number],
@@ -14,7 +14,7 @@ const measuredParametersSchema = new Schema(
     voltage: [Number],
     chamberTemp: [Number],
     chamberHum: [Number],
-    cellTemp: [tempObj],
+    cellTemp: [sensorObj],
     time: [Number],
   },
   { versionKey: false }
