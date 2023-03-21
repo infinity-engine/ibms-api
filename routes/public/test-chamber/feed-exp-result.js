@@ -336,7 +336,7 @@ feedExpResultRoute.post(
         };
         insertMeasurement(identity, req.body)
           .then((results) => {
-            //console.log(results)
+            //console.log(results);
             res.json({ status: "ok" });
           })
           .catch((err) => {
@@ -439,12 +439,13 @@ async function formNewRow(chamberId, testId, channelNo, rowNo, measurements) {
     channelNo,
     rowNo
   );
-  const { current, voltage, chTemp, chHum, cellTemp, time } = measurements;
+  const { current, voltage, chamberTemp, chamberHum, cellTemp, time } =
+    measurements;
   const measurement = new MeasuredParameters({
     current: current,
     voltage: voltage,
-    chamberTemp: chTemp,
-    chamberHum: chHum,
+    chamberTemp: chamberTemp,
+    chamberHum: chamberHum,
     cellTemp: cellTemp,
     time: time,
   });
@@ -537,24 +538,38 @@ function insertMeasurement(identity, measurements) {
       "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.time"
     ] = { $each: measurements.time };
   }
-  if (measurements.cellTemp) {
-    updates[
-      "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.cellTemp"
-    ] = { $each: measurements.cellTemp };
-  }
-  return TestChamber.updateOne(
-    { _id: identity.chamberId },
-    {
-      $push: updates,
+  const updateCellTempOps = measurements.cellTemp.map((tempObj) => ({
+    updateOne: {
+      filter: { _id: identity.chamberId },
+      update: {
+        $push: {
+          "testsPerformed.$[test].testResult.channels.$[channel].rows.$[row].measuredParameters.cellTemp.$[sensor].values":
+            { $each: tempObj.values },
+        },
+      },
+      arrayFilters: [
+        { "test._id": identity.testId },
+        { "channel.channelNo": identity.channelNo },
+        { "row.rowNo": identity.rowNo },
+        { "sensor.sensorId": tempObj.sensorId },
+      ],
     },
-    {
+  }));
+
+  updateCellTempOps.push({
+    updateOne: {
+      filter: { _id: identity.chamberId },
+      update: {
+        $push: updates,
+      },
       arrayFilters: [
         { "test._id": identity.testId },
         { "channel.channelNo": identity.channelNo },
         { "row.rowNo": identity.rowNo },
       ],
-    }
-  );
+    },
+  });
+  return TestChamber.bulkWrite(updateCellTempOps);
 }
 
 async function getLastUpdateStatus(chamberId, testId, channel) {

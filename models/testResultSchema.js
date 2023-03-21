@@ -1,17 +1,25 @@
 const { mongoose, mongo } = require("mongoose");
 const { Schema } = mongoose;
 
+const sensorObj = new Schema(
+  {
+    sensorId: Number,
+    values: [Number],
+  },
+  { versionKey: false }
+);
 const measuredParametersSchema = new Schema(
   {
     current: [Number],
     voltage: [Number],
     chamberTemp: [Number],
     chamberHum: [Number],
-    cellTemp: [[Number]],
+    cellTemp: [sensorObj],
     time: [Number],
   },
   { versionKey: false }
 );
+
 const rowInfoSchema = new Schema(
   {
     rowNo: Number,

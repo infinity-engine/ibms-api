@@ -131,7 +131,7 @@ testChamberRoute.get("/live-tests", async (req, res) => {
   }
 });
 
-testChamberRoute.post("/test-data", async (req, res) => {
+testChamberRoute.post("/get-test-data", async (req, res) => {
   try {
     if (!(req.body.testId && req.body.chamberId)) {
       throw new Error("testId or chamberId isn't received.");
@@ -155,11 +155,18 @@ testChamberRoute.post("/test-data", async (req, res) => {
           chamberId: { $first: "$_id" },
           testName: { $first: "$testsPerformed.testConfig.testName" },
           status: { $first: "$testsPerformed.status" },
+          forcedStatus: { $first: "$testsPerformed.forcedStatus" },
           testConfig: { $first: "$testsPerformed.testConfig" },
           testResult: { $first: "$testsPerformed.testResult" },
           testStartDate: { $first: "$testsPerformed.testStartDate" },
           testScheduleDate: { $first: "$testsPerformed.testScheduleDate" },
           testEndDate: { $first: "$testsPerformed.testEndDate" },
+        },
+      },
+      {
+        $project: {
+          "testResult.channels.rows.measuredParameters": 0,
+          "testResult.channels.rows.derivedParameters": 0,
         },
       },
     ]);
@@ -189,6 +196,161 @@ testChamberRoute.post("/test-data", async (req, res) => {
       delete testInfo.testConfig;
       delete testInfo.testResult;
       res.json(testInfo);
+    } else {
+      throw new Error("Not found!");
+    }
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+testChamberRoute.post("/force-status", async (req, res) => {
+  try {
+    if (
+      !(
+        req.body.testId &&
+        req.body.chamberId &&
+        req.body.forcedStatus !== undefined
+      )
+    ) {
+      throw new Error("testId or chamberId isn't received.");
+    }
+    const chamber = req.user.configuredChambers.find(
+      (cham) => cham._id.toString() === req.body.chamberId
+    );
+    if (!chamber) {
+      throw new Error("Test Chamber not found.");
+    }
+    const testId = mongoose.Types.ObjectId(req.body.testId);
+    const chamberId = chamber._id;
+    const forcedStatus = req.body.forcedStatus;
+
+    const result = await TestChamber.updateOne(
+      { _id: chamberId },
+      { $set: { "testsPerformed.$[test].forcedStatus": forcedStatus } },
+      { arrayFilters: [{ "test._id": testId }] }
+    );
+    res.json(result);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+testChamberRoute.post("/get-test-result", async (req, res) => {
+  try {
+    if (!(req.body.testId && req.body.chamberId && req.body.channelNo)) {
+      throw new Error("testId or chamberId isn't received.");
+    }
+    const chamber = req.user.configuredChambers.find(
+      (cham) => cham._id.toString() === req.body.chamberId
+    );
+    if (!chamber) {
+      throw new Error("Test Chamber not found.");
+    }
+    const testId = mongoose.Types.ObjectId(req.body.testId);
+    const chamberId = chamber._id;
+    const channelNo = +req.body.channelNo;
+    const indexAfter = +req.body.indexAfter || 0; //mention after which array index measurement has to be sent
+    //should be calculated overall, appending all the rows together within a channel
+
+    const testData = await TestChamber.aggregate([
+      { $match: { _id: chamberId } },
+      { $unwind: "$testsPerformed" },
+      { $match: { "testsPerformed._id": testId } },
+      {
+        $group: {
+          _id: "$testsPerformed._id",
+          testResult: { $first: "$testsPerformed.testResult.channels" },
+        },
+      },
+      {
+        $unwind: "$testResult",
+      },
+      {
+        $match: { "testResult.channelNo": channelNo },
+      },
+      {
+        $group: {
+          _id: "$testResult.channelNo",
+          status: { $first: "$testResult.status" },
+          rows: { $first: "$testResult.rows" },
+        },
+      },
+      {
+        $project: {
+          status: 1,
+          "rows.measuredParameters": 1,
+          "rows.derivedParameters": 1,
+          "rows.rowNo": 1,
+        },
+      },
+    ]);
+    //console.log(testData);
+    if (testData && testData.length > 0) {
+      const testInfo = testData[0];
+      const measuredParameters = {
+        current: [],
+        voltage: [],
+        chamberTemp: [],
+        chamberHum: [],
+        chamberTemp: [],
+        cellTemp: [],
+        time: [],
+      };
+      testInfo.rows.forEach((row) => {
+        measuredParameters.current.push(...row.measuredParameters.current);
+        measuredParameters.voltage.push(...row.measuredParameters.voltage);
+        measuredParameters.chamberTemp.push(
+          ...row.measuredParameters.chamberTemp
+        );
+        measuredParameters.chamberHum.push(
+          ...row.measuredParameters.chamberHum
+        );
+        measuredParameters.time.push(...row.measuredParameters.time);
+        if (measuredParameters.cellTemp.length > 0) {
+          row.measuredParameters.cellTemp.forEach((tempObj) => {
+            const prevTempObj = measuredParameters.cellTemp.find(
+              (_tempObj) => _tempObj.sensorId === tempObj.sensorId
+            );
+            prevTempObj?.values.push(...tempObj.values);
+          });
+        } else {
+          measuredParameters.cellTemp = row.measuredParameters.cellTemp;
+        }
+      });
+      //slice the previous sent measurements
+      if (indexAfter > 0) {
+        measuredParameters.current = measuredParameters.current.slice(
+          indexAfter + 1
+        );
+        measuredParameters.voltage = measuredParameters.voltage.slice(
+          indexAfter + 1
+        );
+        measuredParameters.chamberHum = measuredParameters.chamberHum.slice(
+          indexAfter + 1
+        );
+        measuredParameters.chamberTemp = measuredParameters.chamberTemp.slice(
+          indexAfter + 1
+        );
+        measuredParameters.time = measuredParameters.time.slice(indexAfter + 1);
+        measuredParameters.cellTemp = measuredParameters.cellTemp.map(
+          (tempObj) => {
+            return {
+              values: tempObj.values.slice(indexAfter + 1),
+              sensorId: tempObj.sensorId,
+            };
+          }
+        );
+      }
+      res.json({
+        channelNo: testInfo._id,
+        statusCh: testInfo.status,
+        measuredParameters: measuredParameters,
+      });
+    } else {
+      throw new Error("Not found!");
     }
   } catch (err) {
     console.log(err);
