@@ -223,6 +223,9 @@ testChamberRoute.post("/force-status", async (req, res) => {
     if (!chamber) {
       throw new Error("Test Chamber not found.");
     }
+    if (chamber.accessType == "read") {
+      throw new Error("You don't have appropriate privilege");
+    }
     const testId = mongoose.Types.ObjectId(req.body.testId);
     const chamberId = chamber._id;
     const forcedStatus = req.body.forcedStatus;
