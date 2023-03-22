@@ -3,6 +3,7 @@ const { default: mongoose } = require("mongoose");
 const testChamberRoute = express.Router();
 const { TestChamber, USER, ChamberAPI } = require("../../../models/schema");
 const crypto = require("crypto");
+const { stringify } = require("csv-stringify/sync");
 
 //create a new test chamber
 testChamberRoute.post("/", async (req, res) => {
@@ -241,7 +242,7 @@ testChamberRoute.post("/force-status", async (req, res) => {
 testChamberRoute.post("/get-test-result", async (req, res) => {
   try {
     if (!(req.body.testId && req.body.chamberId && req.body.channelNo)) {
-      throw new Error("testId or chamberId isn't received.");
+      throw new Error("testId or chamberId or isn't received.");
     }
     const chamber = req.user.configuredChambers.find(
       (cham) => cham._id.toString() === req.body.chamberId
@@ -255,6 +256,25 @@ testChamberRoute.post("/get-test-result", async (req, res) => {
     const indexAfter = +req.body.indexAfter || 0; //mention after which array index measurement has to be sent
     //should be calculated overall, appending all the rows together within a channel
 
+    const testData = await getMeasurement(
+      chamberId,
+      testId,
+      channelNo,
+      indexAfter
+    );
+    if (testData) {
+      res.json(testData);
+    } else {
+      throw new Error("Not found!");
+    }
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+async function getMeasurement(chamberId, testId, channelNo, indexAfter = 0) {
+  try {
     const testData = await TestChamber.aggregate([
       { $match: { _id: chamberId } },
       { $unwind: "$testsPerformed" },
@@ -344,19 +364,19 @@ testChamberRoute.post("/get-test-result", async (req, res) => {
           }
         );
       }
-      res.json({
+      return {
         channelNo: testInfo._id,
         statusCh: testInfo.status,
         measuredParameters: measuredParameters,
-      });
+      };
     } else {
       throw new Error("Not found!");
     }
   } catch (err) {
     console.log(err);
-    res.status(500).json({ msg: "Error" });
+    return;
   }
-});
+}
 
 testChamberRoute.post("/create-test/", async (req, res) => {
   try {
@@ -375,6 +395,76 @@ testChamberRoute.post("/create-test/", async (req, res) => {
     res.status(500).json({ msg: "Error" });
   }
 });
+
+testChamberRoute.post("/download-test-result", async (req, res) => {
+  try {
+    if (typeof req.body == "string") {
+      req.body = JSON.parse(req.body);
+    }
+    if (!(req.body.testId && req.body.chamberId && req.body.channelNo)) {
+      throw new Error("testId or chamberId or channelNo isn't received.");
+    }
+    const chamber = req.user.configuredChambers.find(
+      (cham) => cham._id.toString() === req.body.chamberId
+    );
+    if (!chamber) {
+      throw new Error("Test Chamber not found.");
+    }
+    const testId = mongoose.Types.ObjectId(req.body.testId);
+    const chamberId = chamber._id;
+    const channelNo = +req.body.channelNo;
+    const indexAfter = +req.body.indexAfter || 0; //mention after which array index measurement has to be sent
+    //should be calculated overall, appending all the rows together within a channel
+
+    const testData = await getMeasurement(
+      chamberId,
+      testId,
+      channelNo,
+      indexAfter
+    );
+    if (testData?.measuredParameters) {
+      res.set({
+        "Content-Type": "text/csv",
+        "Content-Disposition": `attachment; filename="testResult_channel_${channelNo}.csv"`,
+        "Access-Control-Expose-Headers": "Content-Disposition",
+      });
+      res.send(convertIntoCSV(testData?.measuredParameters));
+    } else {
+      throw new Error("Not found!");
+    }
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+function convertIntoCSV(measuredParameters) {
+  const { current, voltage, chamberTemp, chamberHum, cellTemp, time } =
+    measuredParameters;
+  const header = [
+    "Time(S)",
+    "Current(A)",
+    "Voltage(V)",
+    "Chamber Temperature(\u00B0C)",
+    "Chamber Humidity(%)",
+  ];
+  cellTemp.forEach((tempObj) => {
+    header.push("Sensor " + tempObj.sensorId);
+  });
+  const csvData = time.map((time, i) => {
+    let row = [time, current[i], voltage[i], chamberTemp[i], chamberHum[i]];
+    cellTemp.forEach((tempObj) => {
+      row.push(tempObj.values[i]);
+    });
+    return row;
+  });
+  const output = stringify(csvData, {
+    header: true,
+    columns: header,
+    eof: false,
+  });
+  return output;
+}
 
 async function getTestChambersForUser(user) {
   const chamberIds = user.configuredChambers.map((chamber) => chamber._id);
@@ -463,6 +553,7 @@ async function updateChamberAccessOnUser(chamberId, assignedUsers) {
     return false;
   }
 }
+
 async function getUserAdditionalInfo(assignedUsers) {
   try {
     const users = USER.find({ _id: { $in: assignedUsers } }).select({
