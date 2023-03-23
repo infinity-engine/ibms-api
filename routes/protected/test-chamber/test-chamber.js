@@ -78,10 +78,43 @@ testChamberRoute.get("/live-tests", async (req, res) => {
     const chamberIds = req.user.configuredChambers.map(
       (chamber) => chamber._id
     );
+    const tests = await getTests(chamberIds, ["Running", "Paused"]);
+    if (!tests) {
+      res.json([]);
+    }
+    res.json(tests);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+testChamberRoute.get("/all-tests", async (req, res) => {
+  //gives the list of tests that are on live;
+  try {
+    const chamberIds = req.user.configuredChambers.map(
+      (chamber) => chamber._id
+    );
+    const tests = await getTests(chamberIds);
+    if (!tests) {
+      res.json([]);
+    }
+    res.json(tests);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+async function getTests(
+  chamberIds,
+  statusArr = ["Running", "Scheduled", "Stopped", "Paused", "Completed"]
+) {
+  try {
     const tests = await TestChamber.aggregate([
       { $match: { _id: { $in: chamberIds } } },
       { $unwind: "$testsPerformed" },
-      { $match: { "testsPerformed.status": { $in: ["Running", "Paused"] } } },
+      { $match: { "testsPerformed.status": { $in: statusArr } } },
       {
         $group: {
           _id: "$testsPerformed._id",
@@ -91,7 +124,11 @@ testChamberRoute.get("/live-tests", async (req, res) => {
           status: { $first: "$testsPerformed.status" },
           testConfig: { $first: "$testsPerformed.testConfig" },
           testResult: { $first: "$testsPerformed.testResult" },
+          createdOn: { $first: "$testsPerformed.createdOn" },
         },
+      },
+      {
+        $sort: { createdOn: -1 },
       },
       {
         $project: {
@@ -101,36 +138,39 @@ testChamberRoute.get("/live-tests", async (req, res) => {
       },
     ]);
     if (!tests) {
-      res.json([]);
+      return [];
     }
     tests.forEach((test) => {
-      test.channels = test.testResult.channels.map((ch) => {
-        let totalRows = test.testConfig.channels.find(
-          (ch_) => ch_.channelNumber == ch.channelNo
-        )?.testFormats?.length;
-        return {
-          channelNo: ch.channelNo,
-          statusCh: ch.status,
-          chMultiplierIndex: ch.currentMultiplierIndex,
-          chMultiplier: ch.multiplier,
-          onRows: ch.rows.length,
-          totalRows: totalRows,
-          statusRow: ch.rows[ch.rows.length - 1].status,
-          rowMultiplierIndex:
-            ch.rows[ch.rows.length - 1].currentMultiplierIndex,
-          rowMultiplier: ch.rows[ch.rows.length - 1].multiplier,
-        };
-      });
+      try {
+        test.channels = test.testResult.channels.map((ch) => {
+          let totalRows = test.testConfig.channels.find(
+            (ch_) => ch_.channelNumber == ch.channelNo
+          )?.testFormats?.length;
+          return {
+            channelNo: ch.channelNo,
+            statusCh: ch.status,
+            chMultiplierIndex: ch.currentMultiplierIndex,
+            chMultiplier: ch.multiplier,
+            onRows: ch.rows.length,
+            totalRows: totalRows,
+            statusRow: ch.rows[ch.rows.length - 1].status,
+            rowMultiplierIndex:
+              ch.rows[ch.rows.length - 1].currentMultiplierIndex,
+            rowMultiplier: ch.rows[ch.rows.length - 1].multiplier,
+          };
+        });
+      } catch (err) {
+        //do nothing;
+      }
       delete test.testConfig;
       delete test.testResult;
     });
-    //console.log(tests);
-    res.json(tests);
+    return tests;
   } catch (err) {
     console.log(err);
-    res.status(500).json({ msg: "Error" });
+    return;
   }
-});
+}
 
 testChamberRoute.post("/get-test-data", async (req, res) => {
   try {
@@ -183,14 +223,18 @@ testChamberRoute.post("/get-test-data", async (req, res) => {
         delete channel["_id"];
         channel.multiplier = channel["overallRowMultiplier"];
         delete channel["overallRowMultiplier"];
-        let chRes = testInfo.testResult.channels.find(
-          (ch_) => ch_.channelNo == ch.channelNumber
-        );
-        channel.status = chRes?.status;
-        channel.rows = chRes?.rows;
-        channel.currentMultiplierIndex = chRes?.currentMultiplierIndex;
-        channel.chStartDate = chRes?.chStartDate;
-        channel.chEndDate = chRes?.chEndDate;
+        try {
+          let chRes = testInfo.testResult.channels.find(
+            (ch_) => ch_.channelNo == ch.channelNumber
+          );
+          channel.status = chRes?.status;
+          channel.rows = chRes?.rows;
+          channel.currentMultiplierIndex = chRes?.currentMultiplierIndex;
+          channel.chStartDate = chRes?.chStartDate;
+          channel.chEndDate = chRes?.chEndDate;
+        } catch (err) {
+          //do nothing
+        }
         channels.push(channel);
       });
       testInfo.channels = channels;
