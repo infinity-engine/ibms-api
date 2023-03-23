@@ -31,11 +31,90 @@ testChamberRoute.post("/", async (req, res) => {
     if (!updateChamberAccessOnUser(testChamber._id, assignedUsers)) {
       throw new Error("failed to provide access to the users");
     }
-
+    const apis = await generateAPIKey(testChamber._id, assignedUsers);
     res.json({
       ...testChamber.toObject(),
-      apiKey: await generateAPIKey(testChamber._id, assignedUsers),
     });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+//update a test chamber
+testChamberRoute.put("/", async (req, res) => {
+  try {
+    const chamberId = mongoose.Types.ObjectId(req.body._id);
+    let assignedUsers = [];
+    assignedUsers.push({ _id: req.user._id, accessType: "admin" });
+    if (req.body.assignedUsers) {
+      const userIdStr = req.user._id.toString();
+      req.body.assignedUsers.forEach((user) => {
+        if (user._id !== userIdStr) {
+          assignedUsers.push({
+            _id: mongoose.Types.ObjectId(user._id),
+            accessType: user.accessType,
+          });
+        }
+      });
+    }
+    const usersToRemove = []; //user which were present in old data but needed to remove now
+    const usersToUpdateAccess = []; //whose access has to be changed
+    const usersToInsert = []; //new user to provide api
+    const prevUsers = await getUsersForChamber(chamberId);
+
+    prevUsers.forEach((user) => {
+      let i = assignedUsers.findIndex(
+        (u) => u._id.toString() === user._id.toString()
+      );
+      if (i === -1) {
+        usersToRemove.push(user);
+      } else {
+        usersToUpdateAccess.push(user);
+        assignedUsers.splice(i, 1);
+      }
+    });
+    usersToInsert.push(...assignedUsers);
+
+    const payload = {
+      ...req.body,
+      assignedUsers: [...usersToInsert, ...usersToUpdateAccess],
+    };
+    delete payload["_id"];
+    console.log(payload);
+    const testChamberUpdate = TestChamber.updateOne(
+      { _id: chamberId },
+      { $set: payload }
+    );
+    const removeAccessUpdate = removeUsersApiForChambers(
+      usersToRemove.map((user) => user._id),
+      [chamberId]
+    );
+    const updateAccessUpdate = updateUserApiForChamber(
+      usersToUpdateAccess,
+      chamberId
+    );
+
+    await Promise.all([
+      testChamberUpdate,
+      removeAccessUpdate,
+      updateAccessUpdate,
+    ]).then(
+      (data) => {
+        console.log(data);
+      },
+      (err) => {
+        throw new Error(err);
+      }
+    );
+    const apis = await generateAPIKey(chamberId, usersToInsert);
+    if (!apis) {
+      throw new Error("New api creation failed");
+    }
+    if (apis.length == usersToInsert.length) {
+      res.json({ msg: "ok" });
+    } else {
+    }
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
@@ -45,7 +124,17 @@ testChamberRoute.post("/", async (req, res) => {
 //get list of test chamber
 testChamberRoute.get("/", async (req, res) => {
   try {
-    const chbrs = await getTestChambersForUser(req.user);
+    let chbrs = await getTestChambersForUser(req.user);
+    if (req.query.chamberId) {
+      let chamber = chbrs.find(
+        (ch) => ch._id.toString() === req.query.chamberId
+      );
+      if (!chamber) {
+        throw new Error("No chamber found");
+      } else {
+        chbrs = [chamber];
+      }
+    }
     const assignedUsers = [];
     for (let chbr of chbrs) {
       if (chbr.assignedUsers) {
@@ -516,9 +605,13 @@ function convertIntoCSV(measuredParameters) {
 async function getTestChambersForUser(user) {
   const chamberIds = user.configuredChambers.map((chamber) => chamber._id);
 
-  const chambers = await TestChamber.find({
-    _id: { $in: chamberIds },
-  })
+  const chambers = await TestChamber.find(
+    {
+      _id: { $in: chamberIds },
+    },
+    null,
+    { sort: { createdOn: -1 } }
+  )
     .select("-testsPerformed")
     .lean();
 
@@ -548,7 +641,7 @@ async function getChambersExceptReadAccess(user) {
 
 async function generateAPIKey(chamberId, assignedUsers) {
   try {
-    let apiKey = undefined;
+    let apis = [];
     for (let user of assignedUsers) {
       const api = await ChamberAPI.create([
         {
@@ -557,13 +650,12 @@ async function generateAPIKey(chamberId, assignedUsers) {
           assignedUser: user._id,
         },
       ]);
-      if (user.accessType === "admin") {
-        apiKey = api[0].apiKey;
-      }
+      apis.push(api);
     }
-    return apiKey;
+    return apis;
   } catch (err) {
     console.log(err);
+    return;
   }
 }
 
@@ -612,5 +704,49 @@ async function getUserAdditionalInfo(assignedUsers) {
     console.log(err);
     return null;
   }
+}
+async function getUsersForChamber(chamberId) {
+  try {
+    const users = await TestChamber.findOne({ _id: chamberId })
+      .select({
+        assignedUsers: 1,
+      })
+      .lean();
+    if (users) {
+      return users.assignedUsers;
+    } else {
+      return [];
+    }
+  } catch (err) {
+    console.log(err);
+    return;
+  }
+}
+function removeUsersApiForChambers(userIds = [], chamberIds = []) {
+  if (
+    (userIds.length === 1 && chamberIds.length > 0) ||
+    (userIds.length > 0 && chamberIds.length === 1)
+  ) {
+    return ChamberAPI.deleteMany({
+      "assignedChamber._id": { $in: chamberIds },
+      assignedUser: { $in: userIds },
+    });
+  }
+}
+function updateUserApiForChamber(users, chamberId) {
+  let updates = users.map((user) => ({
+    updateOne: {
+      filter: {
+        "assignedChamber._id": chamberId,
+        assignedUser: user._id,
+      },
+      update: {
+        $set: {
+          "assignedChamber.accessType": user.accessType,
+        },
+      },
+    },
+  }));
+  return ChamberAPI.bulkWrite(updates);
 }
 module.exports = testChamberRoute;
