@@ -145,6 +145,7 @@ const cell = new Schema(
       type: [accessSchema],
       default: [],
     },
+    isMarkedForDeleted: { type: mongoose.Schema.Types.Mixed, default: false },
     createdOn: { type: Date, default: Date.now },
     testsPerformed: {
       type: [{ _id: mongoose.Schema.Types.ObjectId }],

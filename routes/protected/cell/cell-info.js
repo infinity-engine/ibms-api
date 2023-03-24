@@ -3,6 +3,7 @@ const express = require("express");
 const { default: mongoose } = require("mongoose");
 const cellInfoRoute = express.Router();
 
+//create a new cell
 cellInfoRoute.post("/", async (req, res) => {
   try {
     const q = req.body.cellQuantity || 1;
@@ -76,7 +77,14 @@ cellInfoRoute.get("/", async (req, res) => {
         });
       }
     }
-    res.json(cells);
+    if (req.query.cellId) {
+      const cell_ = cells.find(
+        (cell) => cell._id.toString() === req.query.cellId
+      );
+      res.josn(cell_);
+    } else {
+      res.json(cells);
+    }
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
@@ -97,6 +105,38 @@ cellInfoRoute.post("/for-experiment", async (req, res) => {
   }
 });
 
+cellInfoRoute.delete("/", async (req, res) => {
+  try {
+    const cellId = mongoose.Types.ObjectId(req.query.cellId);
+    if (!cellId) {
+      throw new Error("Cell Id not received");
+    }
+    const verifyCellPresentInUser = USER.findOne({
+      _id: req.user._id,
+      "configuredCells._id": cellId,
+    });
+    const markDeleteCellInfoUpdate = Cell.updateOne(
+      {
+        _id: cellId,
+        $or: [{ isMarkedForDeleted: undefined }, { isMarkedForDeleted: false }],
+      },
+      { $set: { isMarkedForDeleted: true } }
+    );
+    await Promise.all([verifyCellPresentInUser, markDeleteCellInfoUpdate]).then(
+      (resolve) => {
+        console.log(resolve);
+      },
+      (reject) => {
+        throw new Error(reject);
+      }
+    );
+    res.json({ status: "ok" });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
 async function getCellsForUser(user, forExperiment = false, searchStr = "") {
   let res = await USER.findOne({ _id: user._id }).select("+configuredCells");
   const cellsAssigned = res.configuredCells;
@@ -110,10 +150,16 @@ async function getCellsForUser(user, forExperiment = false, searchStr = "") {
       cellIds.push(cell._id);
     }
   }
-  const cells = await Cell.find({
-    _id: { $in: cellIds },
-    cellName: { $regex: searchStr, $options: "i" },
-  })
+  //only send cells which are not marked for deleted
+  const cells = await Cell.find(
+    {
+      _id: { $in: cellIds },
+      $or: [{ isMarkedForDeleted: undefined }, { isMarkedForDeleted: false }],
+      cellName: { $regex: searchStr, $options: "i" },
+    },
+    null,
+    { sort: { createdOn: -1 } }
+  )
     .select("-testsPerformed")
     .lean();
   const updatedCells = cells.map((cell) => {
@@ -128,6 +174,7 @@ async function getCellsForUser(user, forExperiment = false, searchStr = "") {
   });
   return updatedCells;
 }
+
 async function getUserAdditionalInfo(assignedUsers) {
   try {
     const users = USER.find({ _id: { $in: assignedUsers } }).select({
@@ -140,4 +187,5 @@ async function getUserAdditionalInfo(assignedUsers) {
     return null;
   }
 }
+
 module.exports = cellInfoRoute;
