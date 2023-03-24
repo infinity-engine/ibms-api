@@ -1,7 +1,12 @@
 const express = require("express");
 const { default: mongoose } = require("mongoose");
 const testChamberRoute = express.Router();
-const { TestChamber, USER, ChamberAPI } = require("../../../models/schema");
+const {
+  TestChamber,
+  USER,
+  ChamberAPI,
+  Test,
+} = require("../../../models/schema");
 const crypto = require("crypto");
 const { stringify } = require("csv-stringify/sync");
 
@@ -56,7 +61,10 @@ testChamberRoute.delete("/", async (req, res) => {
       throw new Error("You don't have appropriate priveledges.");
     }
 
-    const deleteChReq = TestChamber.deleteOne({ _id: chamberId });
+    const markDeleteReq = TestChamber.updateOne(
+      { _id: chamberId },
+      { $set: { isMarkedForDeleted: true } }
+    );
     const deleteAPIs = removeUsersApiForChambers(
       prevUsers.map((u) => u._id),
       [chamberId]
@@ -66,7 +74,7 @@ testChamberRoute.delete("/", async (req, res) => {
       chamberId
     );
     await Promise.all([
-      deleteChReq,
+      markDeleteReq,
       deleteAPIs,
       removeChamberFromUsersUpdate,
     ]).then(
@@ -272,72 +280,7 @@ testChamberRoute.get("/all-tests", async (req, res) => {
   }
 });
 
-async function getTests(
-  chamberIds,
-  statusArr = ["Running", "Scheduled", "Stopped", "Paused", "Completed"]
-) {
-  try {
-    const tests = await TestChamber.aggregate([
-      { $match: { _id: { $in: chamberIds } } },
-      { $unwind: "$testsPerformed" },
-      { $match: { "testsPerformed.status": { $in: statusArr } } },
-      {
-        $group: {
-          _id: "$testsPerformed._id",
-          chamberName: { $first: "$name" },
-          chamberId: { $first: "$_id" },
-          testName: { $first: "$testsPerformed.testConfig.testName" },
-          status: { $first: "$testsPerformed.status" },
-          testConfig: { $first: "$testsPerformed.testConfig" },
-          testResult: { $first: "$testsPerformed.testResult" },
-          createdOn: { $first: "$testsPerformed.createdOn" },
-        },
-      },
-      {
-        $sort: { createdOn: -1 },
-      },
-      {
-        $project: {
-          "testResult.channels.rows.measuredParameters": 0,
-          "testResult.channels.rows.derivedParameters": 0,
-        },
-      },
-    ]);
-    if (!tests) {
-      return [];
-    }
-    tests.forEach((test) => {
-      try {
-        test.channels = test.testResult.channels.map((ch) => {
-          let totalRows = test.testConfig.channels.find(
-            (ch_) => ch_.channelNumber == ch.channelNo
-          )?.testFormats?.length;
-          return {
-            channelNo: ch.channelNo,
-            statusCh: ch.status,
-            chMultiplierIndex: ch.currentMultiplierIndex,
-            chMultiplier: ch.multiplier,
-            onRows: ch.rows.length,
-            totalRows: totalRows,
-            statusRow: ch.rows[ch.rows.length - 1].status,
-            rowMultiplierIndex:
-              ch.rows[ch.rows.length - 1].currentMultiplierIndex,
-            rowMultiplier: ch.rows[ch.rows.length - 1].multiplier,
-          };
-        });
-      } catch (err) {
-        //do nothing;
-      }
-      delete test.testConfig;
-      delete test.testResult;
-    });
-    return tests;
-  } catch (err) {
-    console.log(err);
-    return;
-  }
-}
-
+//get information about a test
 testChamberRoute.post("/get-test-data", async (req, res) => {
   try {
     if (!(req.body.testId && req.body.chamberId)) {
@@ -685,6 +628,7 @@ async function getTestChambersForUser(user) {
   const chambers = await TestChamber.find(
     {
       _id: { $in: chamberIds },
+      isMarkedForDeleted: { $in: [undefined, false] },
     },
     null,
     { sort: { createdOn: -1 } }
@@ -861,5 +805,58 @@ function insertAssignedChamberOnUsers(users, chamberId) {
     },
   }));
   return USER.bulkWrite(updates);
+}
+//gives you the list of test on specified status array
+async function getTests(
+  chamberIds,
+  statusArr = ["Running", "Scheduled", "Stopped", "Paused", "Completed"]
+) {
+  try {
+    const tests = await Test.aggregate([
+      { $match: { createdOnChamber: { $in: chamberIds } } },
+      { $match: { status: { $in: statusArr } } },
+      {
+        $sort: { createdOn: -1 },
+      },
+      {
+        $project: {
+          "testResult.channels.rows.measuredParameters": 0,
+          "testResult.channels.rows.derivedParameters": 0,
+        },
+      },
+    ]);
+    if (!tests) {
+      return [];
+    }
+    tests.forEach((test) => {
+      try {
+        test.channels = test.testResult.channels.map((ch) => {
+          let totalRows = test.testConfig.channels.find(
+            (ch_) => ch_.channelNumber == ch.channelNo
+          )?.testFormats?.length;
+          return {
+            channelNo: ch.channelNo,
+            statusCh: ch.status,
+            chMultiplierIndex: ch.currentMultiplierIndex,
+            chMultiplier: ch.multiplier,
+            onRows: ch.rows.length,
+            totalRows: totalRows,
+            statusRow: ch.rows[ch.rows.length - 1].status,
+            rowMultiplierIndex:
+              ch.rows[ch.rows.length - 1].currentMultiplierIndex,
+            rowMultiplier: ch.rows[ch.rows.length - 1].multiplier,
+          };
+        });
+      } catch (err) {
+        //do nothing;
+      }
+      delete test.testConfig;
+      delete test.testResult;
+    });
+    return tests;
+  } catch (err) {
+    console.log(err);
+    return;
+  }
 }
 module.exports = testChamberRoute;
