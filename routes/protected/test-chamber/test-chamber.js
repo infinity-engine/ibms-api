@@ -122,7 +122,7 @@ testChamberRoute.put("/", async (req, res) => {
       if (i === -1) {
         usersToRemove.push(user);
       } else {
-        usersToUpdateAccess.push(user);
+        usersToUpdateAccess.push(assignedUsers[i]);
         assignedUsers.splice(i, 1);
       }
     });
@@ -133,44 +133,65 @@ testChamberRoute.put("/", async (req, res) => {
       assignedUsers: [...usersToInsert, ...usersToUpdateAccess],
     };
     delete payload["_id"];
-    console.log(payload);
+    //console.log(payload);
+
+    //for testChamber users on updating cover all the three types of user
+    // update,insert and delte as we are completely resetting the assignedUser array
     const testChamberUpdate = TestChamber.updateOne(
       { _id: chamberId },
       { $set: payload }
     );
+
+    //for api
+    //remove
     const removeAccessUpdate = removeUsersApiForChambers(
       usersToRemove.map((user) => user._id),
       [chamberId]
     );
-    const removeChamberFromUsersUpdate = removeAssignedChamberFromUsers(
-      usersToRemove,
-      chamberId
-    );
+    //change
     const updateAccessUpdate = updateUserApiForChamber(
       usersToUpdateAccess,
       chamberId
     );
+    //insert
+    const newAPICreationUpdate = generateAPIKey(chamberId, usersToInsert);
+
+    //for user
+    //remove
+    const removeChamberFromUsersUpdate = removeAssignedChamberFromUsers(
+      usersToRemove,
+      chamberId
+    );
+    //change
+    const updateAssignedChamberFromUsersUpdate = updateAssignedChamberFromUsers(
+      usersToUpdateAccess,
+      chamberId
+    );
+    //insert
+    const insertAssignedChamberOnUsersUpdate = insertAssignedChamberOnUsers(
+      usersToInsert,
+      chamberId
+    );
+    let apis = undefined;
     await Promise.all([
       testChamberUpdate,
       removeAccessUpdate,
-      removeChamberFromUsersUpdate,
       updateAccessUpdate,
+      newAPICreationUpdate,
+      removeChamberFromUsersUpdate,
+      updateAssignedChamberFromUsersUpdate,
+      insertAssignedChamberOnUsersUpdate,
     ]).then(
       (data) => {
         //console.log(data);
+        apis = data[3];
       },
       (err) => {
         throw new Error(err);
       }
     );
-    const apis = await generateAPIKey(chamberId, usersToInsert);
-    if (!apis) {
-      throw new Error("New api creation failed");
-    }
-    if (apis.length == usersToInsert.length) {
-      res.json({ msg: "ok" });
-    } else {
-    }
+
+    res.json({ msg: "ok" });
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
@@ -810,6 +831,33 @@ function removeAssignedChamberFromUsers(users, chamberId) {
     updateOne: {
       filter: { _id: user._id },
       update: { $pull: { configuredChambers: { _id: chamberId } } },
+    },
+  }));
+  return USER.bulkWrite(updates);
+}
+function updateAssignedChamberFromUsers(users, chamberId) {
+  let updates = users.map((user) => ({
+    updateOne: {
+      filter: { _id: user._id },
+      update: {
+        $set: {
+          "configuredChambers.$[chamber].accessType": user.accessType,
+        },
+      },
+      arrayFilters: [{ "chamber._id": chamberId }],
+    },
+  }));
+  return USER.bulkWrite(updates);
+}
+function insertAssignedChamberOnUsers(users, chamberId) {
+  let updates = users.map((user) => ({
+    updateOne: {
+      filter: { _id: user._id },
+      update: {
+        $push: {
+          configuredChambers: { _id: chamberId, accessType: user.accessType },
+        },
+      },
     },
   }));
   return USER.bulkWrite(updates);

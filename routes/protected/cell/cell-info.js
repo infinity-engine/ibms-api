@@ -55,6 +55,7 @@ cellInfoRoute.post("/", async (req, res) => {
   }
 });
 
+//get the cell/cells info
 cellInfoRoute.get("/", async (req, res) => {
   try {
     const cells = await getCellsForUser(req.user);
@@ -81,10 +82,69 @@ cellInfoRoute.get("/", async (req, res) => {
       const cell_ = cells.find(
         (cell) => cell._id.toString() === req.query.cellId
       );
-      res.josn(cell_);
+      res.json(cell_);
     } else {
       res.json(cells);
     }
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+cellInfoRoute.put("/", async (req, res) => {
+  try {
+    const cellId = mongoose.Types.ObjectId(req.body._id);
+    const prevUsers = await getUsersForCell(cellId);
+    const user = prevUsers.find(
+      (u) => u._id.toString() === req.user._id.toString()
+    );
+    if (!(user && user.accessType === "admin")) {
+      throw new Error("You don't have appropriate priveledges.");
+    }
+
+    let assignedUsers = [];
+
+    assignedUsers.push({ _id: req.user._id, accessType: "admin" });
+
+    if (req.body.assignedUsers) {
+      const userIdStr = req.user._id.toString();
+      req.body.assignedUsers.forEach((user) => {
+        if (user._id !== userIdStr) {
+          assignedUsers.push({
+            _id: mongoose.Types.ObjectId(user._id),
+            accessType: user.accessType,
+          });
+        }
+      });
+    }
+    const usersToRemove = []; //user which were present in old data but needed to remove now
+    const usersToUpdateAccess = []; //whose access has to be changed
+    const usersToInsert = []; //new user to provide api
+
+    prevUsers.forEach((user) => {
+      let i = assignedUsers.findIndex(
+        (u) => u._id.toString() === user._id.toString()
+      );
+      if (i === -1) {
+        usersToRemove.push(user);
+      } else {
+        usersToUpdateAccess.push(user);
+        assignedUsers.splice(i, 1);
+      }
+    });
+    usersToInsert.push(...assignedUsers);
+    const payload = {
+      ...req.body,
+      assignedUsers: [...usersToInsert, ...usersToUpdateAccess],
+    };
+    delete payload["_id"];
+
+    const cellUpdate = Cell.updateOne({ _id: cellId }, { $set: payload });
+    const removeCellFromUsersUpdate = removeAssignedCellFromUsers(
+      usersToRemove,
+      cellId
+    );
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
@@ -111,18 +171,25 @@ cellInfoRoute.delete("/", async (req, res) => {
     if (!cellId) {
       throw new Error("Cell Id not received");
     }
-    const verifyCellPresentInUser = USER.findOne({
+    await USER.findOne({
       _id: req.user._id,
       "configuredCells._id": cellId,
-    });
-    const markDeleteCellInfoUpdate = Cell.updateOne(
+      "configuredCells.accessType": admin, //only admin is allowed for this operation.
+    }).then(
+      (resolve) => {
+        console.log(resolve);
+      },
+      (reject) => {
+        throw new Error(reject);
+      }
+    );
+    await Cell.updateOne(
       {
         _id: cellId,
         $or: [{ isMarkedForDeleted: undefined }, { isMarkedForDeleted: false }],
       },
       { $set: { isMarkedForDeleted: true } }
-    );
-    await Promise.all([verifyCellPresentInUser, markDeleteCellInfoUpdate]).then(
+    ).then(
       (resolve) => {
         console.log(resolve);
       },
@@ -175,7 +242,29 @@ async function getCellsForUser(user, forExperiment = false, searchStr = "") {
   return updatedCells;
 }
 
-async function getUserAdditionalInfo(assignedUsers) {
+function removeAssignedCellFromUsers(users, cellId) {
+  let updates = users.map((user) => ({
+    updateOne: {
+      filter: { _id: user._id },
+      update: { $pull: { configuredCells: { _id: cellId } } },
+    },
+  }));
+  return USER.bulkWrite(updates);
+}
+
+async function getUsersForCell(cellId) {
+  try {
+    const users = await Cell.findOne({ _id: cellId }).select({
+      assignedUsers: 1,
+    });
+    return users;
+  } catch (err) {
+    console.log(err);
+    return null;
+  }
+}
+
+async function getUsersAdditionalInfo(assignedUsers) {
   try {
     const users = USER.find({ _id: { $in: assignedUsers } }).select({
       _id: 1,
