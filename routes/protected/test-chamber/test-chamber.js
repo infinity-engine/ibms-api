@@ -41,12 +41,65 @@ testChamberRoute.post("/", async (req, res) => {
   }
 });
 
+//delete the test chamber
+testChamberRoute.delete("/", async (req, res) => {
+  try {
+    if (!req.query.chamberId) {
+      throw new Error("Chamber Id not received");
+    }
+    const chamberId = mongoose.Types.ObjectId(req.query.chamberId);
+    const prevUsers = await getUsersForChamber(chamberId);
+    const user = prevUsers.find(
+      (u) => u._id.toString() === req.user._id.toString()
+    );
+    if (!(user && user.accessType === "admin")) {
+      throw new Error("You don't have appropriate priveledges.");
+    }
+
+    const deleteChReq = TestChamber.deleteOne({ _id: chamberId });
+    const deleteAPIs = removeUsersApiForChambers(
+      prevUsers.map((u) => u._id),
+      [chamberId]
+    );
+    const removeChamberFromUsersUpdate = removeAssignedChamberFromUsers(
+      prevUsers,
+      chamberId
+    );
+    await Promise.all([
+      deleteChReq,
+      deleteAPIs,
+      removeChamberFromUsersUpdate,
+    ]).then(
+      (resp) => {
+        console.log(resp);
+      },
+      (err) => {
+        throw new Error(err);
+      }
+    );
+    res.json({ msg: "ok" });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
 //update a test chamber
 testChamberRoute.put("/", async (req, res) => {
   try {
     const chamberId = mongoose.Types.ObjectId(req.body._id);
+    const prevUsers = await getUsersForChamber(chamberId);
+    const user = prevUsers.find(
+      (u) => u._id.toString() === req.user._id.toString()
+    );
+    if (!(user && user.accessType === "admin")) {
+      throw new Error("You don't have appropriate priveledges.");
+    }
+
     let assignedUsers = [];
+
     assignedUsers.push({ _id: req.user._id, accessType: "admin" });
+
     if (req.body.assignedUsers) {
       const userIdStr = req.user._id.toString();
       req.body.assignedUsers.forEach((user) => {
@@ -61,7 +114,6 @@ testChamberRoute.put("/", async (req, res) => {
     const usersToRemove = []; //user which were present in old data but needed to remove now
     const usersToUpdateAccess = []; //whose access has to be changed
     const usersToInsert = []; //new user to provide api
-    const prevUsers = await getUsersForChamber(chamberId);
 
     prevUsers.forEach((user) => {
       let i = assignedUsers.findIndex(
@@ -90,18 +142,22 @@ testChamberRoute.put("/", async (req, res) => {
       usersToRemove.map((user) => user._id),
       [chamberId]
     );
+    const removeChamberFromUsersUpdate = removeAssignedChamberFromUsers(
+      usersToRemove,
+      chamberId
+    );
     const updateAccessUpdate = updateUserApiForChamber(
       usersToUpdateAccess,
       chamberId
     );
-
     await Promise.all([
       testChamberUpdate,
       removeAccessUpdate,
+      removeChamberFromUsersUpdate,
       updateAccessUpdate,
     ]).then(
       (data) => {
-        console.log(data);
+        //console.log(data);
       },
       (err) => {
         throw new Error(err);
@@ -748,5 +804,14 @@ function updateUserApiForChamber(users, chamberId) {
     },
   }));
   return ChamberAPI.bulkWrite(updates);
+}
+function removeAssignedChamberFromUsers(users, chamberId) {
+  let updates = users.map((user) => ({
+    updateOne: {
+      filter: { _id: user._id },
+      update: { $pull: { configuredChambers: { _id: chamberId } } },
+    },
+  }));
+  return USER.bulkWrite(updates);
 }
 module.exports = testChamberRoute;
