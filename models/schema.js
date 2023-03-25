@@ -43,6 +43,44 @@ const user = new Schema(
   },
   { versionKey: false }
 );
+const test = new Schema(
+  {
+    testConfig: {
+      type: payLoadSchema,
+    },
+    testResult: {
+      type: testResultSchema,
+      default: { channels: [] },
+    },
+    testScheduleDate: Date, //expected to start at this time
+    testStartDate: Date, //actual start date, may be due to delay of network from chamber to cloud
+    testEndDate: Date, //could be completed, or stopped date
+    createdOn: { type: Date, default: Date.now },
+    createdByUser: mongoose.Schema.Types.ObjectId,
+    createdOnChamber: mongoose.Schema.Types.ObjectId,
+    testName: {
+      type: String,
+      required: true,
+    },
+    testDesc: {
+      type: String,
+      required: false,
+    },
+    status: {
+      type: String,
+      enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
+      default: "Scheduled",
+    },
+    forcedStatus: {
+      type: mongoose.Schema.Types.Mixed,
+      enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused", null],
+      default: null,
+    },
+  },
+  { versionKey: false }
+);
+test.index({ createdOnChamber: 1 }, { background: true });
+test.index({ createdByUser: 1 }, { background: true });
 
 const testchamber = new Schema(
   {
@@ -58,42 +96,8 @@ const testchamber = new Schema(
       default: [],
     },
     testsPerformed: {
-      type: [
-        {
-          _id: {
-            type: mongoose.Schema.Types.ObjectId,
-            required: true,
-            auto: true,
-          },
-          testConfig: {
-            type: payLoadSchema,
-          },
-          testResult: {
-            type: testResultSchema,
-            default: { channels: [] },
-          },
-          testScheduleDate: Date, //expected to start at this time
-          testStartDate: Date, //actual start date, may be due to delay of network from chamber to cloud
-          testEndDate: Date, //could be completed, or stopped date
-          createdOn: { type: Date, default: Date.now },
-          status: {
-            type: String,
-            enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
-            default: "Scheduled",
-          },
-          forcedStatus: {
-            type: String | null,
-            enum: [
-              "Completed",
-              "Running",
-              "Scheduled",
-              "Stopped",
-              "Paused",
-              null,
-            ],
-          },
-        },
-      ],
+      type: [{ testId: mongoose.Schema.Types.ObjectId }],
+      default: [],
     },
     createdOn: {
       type: Date,
@@ -108,6 +112,7 @@ const testchamber = new Schema(
       default: false,
     },
     lastSeen: Date,
+    isMarkedForDeleted: { type: mongoose.Schema.Types.Mixed, default: false },
   },
   { versionKey: false }
 );
@@ -145,9 +150,10 @@ const cell = new Schema(
       type: [accessSchema],
       default: [],
     },
+    isMarkedForDeleted: { type: mongoose.Schema.Types.Mixed, default: false },
     createdOn: { type: Date, default: Date.now },
     testsPerformed: {
-      type: [{ _id: mongoose.Schema.Types.ObjectId }],
+      type: [{ testConfigChannelId: mongoose.Schema.Types.ObjectId }],
       default: [],
     },
   },
@@ -178,6 +184,7 @@ const chamberapi = new Schema(
   },
   { versionKey: false }
 );
+
 chamberapi.index({ apiKey: 1 }, { background: true });
 
 const USER = mongoose.model("USER", user);
@@ -185,5 +192,6 @@ const TestChamber = mongoose.model("TestChamber", testchamber);
 const CellTemplate = mongoose.model("CellTemplate", celltemplate);
 const Cell = mongoose.model("Cell", cell);
 const ChamberAPI = mongoose.model("chamberAPI", chamberapi);
+const Test = mongoose.model("Test", test);
 
-module.exports = { USER, TestChamber, CellTemplate, Cell, ChamberAPI };
+module.exports = { USER, TestChamber, CellTemplate, Cell, ChamberAPI, Test };

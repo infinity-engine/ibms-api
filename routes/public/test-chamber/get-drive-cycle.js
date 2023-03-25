@@ -2,26 +2,21 @@ const express = require("express");
 const { default: mongoose } = require("mongoose");
 const getDriveCycleRoute = express.Router();
 const checkAccess = require("../../../middleware/checkAccess/checkAccess");
-const { TestChamber } = require("../../../models/schema");
+const { TestChamber, Test } = require("../../../models/schema");
 const { stringify } = require("csv-stringify/sync");
 
 getDriveCycleRoute.get("/", checkAccess, async (req, res) => {
   // /get-drive-cycle?apiKey=add&testId=id&channelNo=1&rowNo=1
   try {
     //console.log(req.query);
+    const testId = mongoose.Types.ObjectId(req.query.testId);
 
-    const result = await TestChamber.aggregate([
-      { $match: { _id: req.assignedChamberId } },
-      { $unwind: "$testsPerformed" },
+    const result = await Test.aggregate([
+      { $match: { _id: testId } },
       {
-        $match: {
-          "testsPerformed._id": mongoose.Types.ObjectId(req.query.testId),
-        },
-      },
-      {
-        $group: {
-          _id: "$testsPerformed._id",
-          testConfig: { $first: "$testsPerformed.testConfig" },
+        $project: {
+          _id: 1,
+          testConfig: 1,
         },
       },
     ]);

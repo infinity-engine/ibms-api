@@ -79,7 +79,7 @@ const channelFieldsSchema = new Schema({
     required: true,
   },
   cellID: {
-    type: mongoose.Schema.Types.String,
+    type: mongoose.Schema.Types.ObjectId,
     required: false, //gotta change it later
   },
   testFormats: [testFormatSchema],
@@ -91,14 +91,6 @@ const channelFieldsSchema = new Schema({
 
 const payLoadSchema = new mongoose.Schema({
   channels: [channelFieldsSchema],
-  testName: {
-    type: String,
-    required: false,
-  },
-  testDesc: {
-    type: String,
-    required: false,
-  },
   isConAmTe: {
     type: Boolean,
     required: false,
