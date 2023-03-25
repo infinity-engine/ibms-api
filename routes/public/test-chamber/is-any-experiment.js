@@ -2,29 +2,25 @@ const express = require("express");
 const { default: mongoose } = require("mongoose");
 const isAnyExperimentRouter = express.Router();
 const checkAccess = require("../../../middleware/checkAccess/checkAccess");
-const { TestChamber } = require("../../../models/schema");
+const { TestChamber, Test } = require("../../../models/schema");
 
 isAnyExperimentRouter.get("/", checkAccess, async (req, res) => {
   try {
     //console.log(req.assignedChamberId);
+    //req.assignedTestIds
     const currentDate = new Date();
-    const result = await TestChamber.aggregate([
-      { $match: { _id: mongoose.Types.ObjectId(req.assignedChamberId) } },
-      { $unwind: "$testsPerformed" },
+    const result = await Test.aggregate([
+      { $match: { _id: { $in: req.assignedTestIds } } },
       {
         $match: {
-          "testsPerformed.status": "Scheduled",
+          status: "Scheduled",
         },
       },
       {
-        $group: {
-          _id: "$testsPerformed._id",
-          testConfig: {
-            $first: "$testsPerformed.testConfig",
-          },
-          testScheduleDate: {
-            $first: "$testsPerformed.testScheduleDate",
-          },
+        $project: {
+          _id: 1,
+          testConfig: 1,
+          testScheduleDate: 1,
         },
       },
       {
@@ -48,7 +44,7 @@ isAnyExperimentRouter.get("/", checkAccess, async (req, res) => {
 
 function getOutput(testConfig) {
   if (testConfig) {
-    const testConfigOut = { channels: [] ,testId:testConfig.testId};
+    const testConfigOut = { channels: [], testId: testConfig.testId };
     for (let channel of testConfig.channels) {
       const config = {};
 

@@ -58,21 +58,29 @@ const test = new Schema(
     createdOn: { type: Date, default: Date.now },
     createdByUser: mongoose.Schema.Types.ObjectId,
     createdOnChamber: mongoose.Schema.Types.ObjectId,
+    testName: {
+      type: String,
+      required: true,
+    },
+    testDesc: {
+      type: String,
+      required: false,
+    },
     status: {
       type: String,
       enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused"],
       default: "Scheduled",
     },
     forcedStatus: {
-      type: String | null,
+      type: mongoose.Schema.Types.Mixed,
       enum: ["Completed", "Running", "Scheduled", "Stopped", "Paused", null],
+      default: null,
     },
   },
   { versionKey: false }
 );
 test.index({ createdOnChamber: 1 }, { background: true });
 test.index({ createdByUser: 1 }, { background: true });
-test.index({ "testConfig._id": 1 }, { background: true });
 
 const testchamber = new Schema(
   {
@@ -145,7 +153,7 @@ const cell = new Schema(
     isMarkedForDeleted: { type: mongoose.Schema.Types.Mixed, default: false },
     createdOn: { type: Date, default: Date.now },
     testsPerformed: {
-      type: [{ testConfigId: mongoose.Schema.Types.ObjectId }],
+      type: [{ testConfigChannelId: mongoose.Schema.Types.ObjectId }],
       default: [],
     },
   },

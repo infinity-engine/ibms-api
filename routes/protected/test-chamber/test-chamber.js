@@ -6,9 +6,11 @@ const {
   USER,
   ChamberAPI,
   Test,
+  Cell,
 } = require("../../../models/schema");
 const crypto = require("crypto");
 const { stringify } = require("csv-stringify/sync");
+const { resolve } = require("path");
 
 //create a new test chamber
 testChamberRoute.post("/", async (req, res) => {
@@ -264,7 +266,6 @@ testChamberRoute.get("/live-tests", async (req, res) => {
 });
 
 testChamberRoute.get("/all-tests", async (req, res) => {
-  //gives the list of tests that are on live;
   try {
     const chamberIds = req.user.configuredChambers.map(
       (chamber) => chamber._id
@@ -294,25 +295,8 @@ testChamberRoute.post("/get-test-data", async (req, res) => {
     }
     const testId = mongoose.Types.ObjectId(req.body.testId);
     const chamberId = chamber._id;
-    const testData = await TestChamber.aggregate([
-      { $match: { _id: chamberId } },
-      { $unwind: "$testsPerformed" },
-      { $match: { "testsPerformed._id": testId } },
-      {
-        $group: {
-          _id: "$testsPerformed._id",
-          chamberName: { $first: "$name" },
-          chamberId: { $first: "$_id" },
-          testName: { $first: "$testsPerformed.testConfig.testName" },
-          status: { $first: "$testsPerformed.status" },
-          forcedStatus: { $first: "$testsPerformed.forcedStatus" },
-          testConfig: { $first: "$testsPerformed.testConfig" },
-          testResult: { $first: "$testsPerformed.testResult" },
-          testStartDate: { $first: "$testsPerformed.testStartDate" },
-          testScheduleDate: { $first: "$testsPerformed.testScheduleDate" },
-          testEndDate: { $first: "$testsPerformed.testEndDate" },
-        },
-      },
+    const testData = await Test.aggregate([
+      { $match: { _id: testId, createdOnChamber: chamberId } },
       {
         $project: {
           "testResult.channels.rows.measuredParameters": 0,
@@ -320,6 +304,10 @@ testChamberRoute.post("/get-test-data", async (req, res) => {
         },
       },
     ]);
+    const chamberName = await TestChamber.findOne({ _id: chamberId })
+      .select({ name: 1 })
+      .lean();
+
     if (testData && testData.length > 0) {
       testData[0].accessType = chamber.accessType;
       const testInfo = testData[0];
@@ -347,6 +335,7 @@ testChamberRoute.post("/get-test-data", async (req, res) => {
         channels.push(channel);
       });
       testInfo.channels = channels;
+      testInfo.chamberName = chamberName.name;
       delete testInfo.testConfig;
       delete testInfo.testResult;
       res.json(testInfo);
@@ -383,10 +372,9 @@ testChamberRoute.post("/force-status", async (req, res) => {
     const chamberId = chamber._id;
     const forcedStatus = req.body.forcedStatus;
 
-    const result = await TestChamber.updateOne(
-      { _id: chamberId },
-      { $set: { "testsPerformed.$[test].forcedStatus": forcedStatus } },
-      { arrayFilters: [{ "test._id": testId }] }
+    const result = await Test.updateOne(
+      { _id: testId, createdOnChamber: chamberId },
+      { $set: { forcedStatus: forcedStatus } }
     );
     res.json(result);
   } catch (err) {
@@ -429,16 +417,105 @@ testChamberRoute.post("/get-test-result", async (req, res) => {
   }
 });
 
+testChamberRoute.post("/create-test/", async (req, res) => {
+  try {
+    const chambers = await getChambersExceptReadAccess(req.user);
+    const chamberId = mongoose.Types.ObjectId(req.body.chamberId);
+    if (chambers.find((e) => e == req.body.chamberId)) {
+      const testConfig = await Test.create({
+        ...req.body.testConfig,
+        createdOnChamber: chamberId,
+        createdByUser: req.user._id,
+      });
+      if (!testConfig) {
+        throw new Error("Test Creation Failed");
+      }
+      //insert the test id into chamber and cell
+      const chamberUpdate = TestChamber.updateOne(
+        { _id: chamberId },
+        { $push: { testsPerformed: { testId: testConfig._id } } }
+      );
+      const cells = testConfig.testConfig.channels.map((ch) => ({
+        cellID: ch.cellID,
+        testConfigChannelId: ch._id,
+      }));
+      const updates = cells.map((cell) => ({
+        updateOne: {
+          filter: { _id: cell.cellID },
+          update: {
+            $push: {
+              testsPerformed: { testConfigChannelId: cell.testConfigChannelId },
+            },
+          },
+        },
+      }));
+      const cellUpdate = Cell.bulkWrite(updates);
+      await Promise.all([chamberUpdate, cellUpdate]).then(
+        (resolve) => {},
+        (reject) => {
+          throw new Error(reject);
+        }
+      );
+      res.json(testConfig);
+    } else {
+      res.status(401).json("You don't have adequate access to this chamber");
+    }
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+testChamberRoute.post("/download-test-result", async (req, res) => {
+  try {
+    if (typeof req.body == "string") {
+      req.body = JSON.parse(req.body);
+    }
+    if (!(req.body.testId && req.body.chamberId && req.body.channelNo)) {
+      throw new Error("testId or chamberId or channelNo isn't received.");
+    }
+    const chamber = req.user.configuredChambers.find(
+      (cham) => cham._id.toString() === req.body.chamberId
+    );
+    if (!chamber) {
+      throw new Error("Test Chamber not found.");
+    }
+    const testId = mongoose.Types.ObjectId(req.body.testId);
+    const chamberId = chamber._id;
+    const channelNo = +req.body.channelNo;
+    const indexAfter = +req.body.indexAfter || 0; //mention after which array index measurement has to be sent
+    //should be calculated overall, appending all the rows together within a channel
+
+    const testData = await getMeasurement(
+      chamberId,
+      testId,
+      channelNo,
+      indexAfter
+    );
+    if (testData?.measuredParameters) {
+      res.set({
+        "Content-Type": "text/csv",
+        "Content-Disposition": `attachment; filename="testResult_channel_${channelNo}.csv"`,
+        "Access-Control-Expose-Headers": "Content-Disposition",
+      });
+      res.send(convertIntoCSV(testData?.measuredParameters));
+    } else {
+      throw new Error("Not found!");
+    }
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
 async function getMeasurement(chamberId, testId, channelNo, indexAfter = 0) {
   try {
-    const testData = await TestChamber.aggregate([
-      { $match: { _id: chamberId } },
-      { $unwind: "$testsPerformed" },
-      { $match: { "testsPerformed._id": testId } },
+    const testData = await Test.aggregate([
+      { $match: { _id: testId, createdOnChamber: chamberId } },
       {
         $group: {
-          _id: "$testsPerformed._id",
-          testResult: { $first: "$testsPerformed.testResult.channels" },
+          _id: "$_id",
+          testResult: { $first: "$testResult.channels" },
         },
       },
       {
@@ -534,94 +611,6 @@ async function getMeasurement(chamberId, testId, channelNo, indexAfter = 0) {
   }
 }
 
-testChamberRoute.post("/create-test/", async (req, res) => {
-  try {
-    const chambers = await getChambersExceptReadAccess(req.user);
-    if (chambers.find((e) => e == req.body.chamberId)) {
-      const testConfig = await TestChamber.updateOne(
-        { _id: mongoose.Types.ObjectId(req.body.chamberId) },
-        { $push: { testsPerformed: req.body.testConfig } }
-      );
-      res.json(testConfig);
-    } else {
-      res.status(401).json("You don't have adequate access to this chamber");
-    }
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ msg: "Error" });
-  }
-});
-
-testChamberRoute.post("/download-test-result", async (req, res) => {
-  try {
-    if (typeof req.body == "string") {
-      req.body = JSON.parse(req.body);
-    }
-    if (!(req.body.testId && req.body.chamberId && req.body.channelNo)) {
-      throw new Error("testId or chamberId or channelNo isn't received.");
-    }
-    const chamber = req.user.configuredChambers.find(
-      (cham) => cham._id.toString() === req.body.chamberId
-    );
-    if (!chamber) {
-      throw new Error("Test Chamber not found.");
-    }
-    const testId = mongoose.Types.ObjectId(req.body.testId);
-    const chamberId = chamber._id;
-    const channelNo = +req.body.channelNo;
-    const indexAfter = +req.body.indexAfter || 0; //mention after which array index measurement has to be sent
-    //should be calculated overall, appending all the rows together within a channel
-
-    const testData = await getMeasurement(
-      chamberId,
-      testId,
-      channelNo,
-      indexAfter
-    );
-    if (testData?.measuredParameters) {
-      res.set({
-        "Content-Type": "text/csv",
-        "Content-Disposition": `attachment; filename="testResult_channel_${channelNo}.csv"`,
-        "Access-Control-Expose-Headers": "Content-Disposition",
-      });
-      res.send(convertIntoCSV(testData?.measuredParameters));
-    } else {
-      throw new Error("Not found!");
-    }
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ msg: "Error" });
-  }
-});
-
-function convertIntoCSV(measuredParameters) {
-  const { current, voltage, chamberTemp, chamberHum, cellTemp, time } =
-    measuredParameters;
-  const header = [
-    "Time(S)",
-    "Current(A)",
-    "Voltage(V)",
-    "Chamber Temperature(\u00B0C)",
-    "Chamber Humidity(%)",
-  ];
-  cellTemp.forEach((tempObj) => {
-    header.push("Sensor " + tempObj.sensorId);
-  });
-  const csvData = time.map((time, i) => {
-    let row = [time, current[i], voltage[i], chamberTemp[i], chamberHum[i]];
-    cellTemp.forEach((tempObj) => {
-      row.push(tempObj.values[i]);
-    });
-    return row;
-  });
-  const output = stringify(csvData, {
-    header: true,
-    columns: header,
-    eof: false,
-  });
-  return output;
-}
-
 async function getTestChambersForUser(user) {
   const chamberIds = user.configuredChambers.map((chamber) => chamber._id);
 
@@ -651,6 +640,7 @@ async function getTestChambersForUser(user) {
 }
 
 async function getChambersExceptReadAccess(user) {
+  //return array of chamberId<string>
   let chmbrs = [];
   user.configuredChambers.forEach((element) => {
     if (element.accessType !== "read") {
@@ -726,6 +716,7 @@ async function getUserAdditionalInfo(assignedUsers) {
     return null;
   }
 }
+
 async function getUsersForChamber(chamberId) {
   try {
     const users = await TestChamber.findOne({ _id: chamberId })
@@ -743,76 +734,13 @@ async function getUsersForChamber(chamberId) {
     return;
   }
 }
-function removeUsersApiForChambers(userIds = [], chamberIds = []) {
-  if (
-    (userIds.length === 1 && chamberIds.length > 0) ||
-    (userIds.length > 0 && chamberIds.length === 1)
-  ) {
-    return ChamberAPI.deleteMany({
-      "assignedChamber._id": { $in: chamberIds },
-      assignedUser: { $in: userIds },
-    });
-  }
-}
-function updateUserApiForChamber(users, chamberId) {
-  let updates = users.map((user) => ({
-    updateOne: {
-      filter: {
-        "assignedChamber._id": chamberId,
-        assignedUser: user._id,
-      },
-      update: {
-        $set: {
-          "assignedChamber.accessType": user.accessType,
-        },
-      },
-    },
-  }));
-  return ChamberAPI.bulkWrite(updates);
-}
-function removeAssignedChamberFromUsers(users, chamberId) {
-  let updates = users.map((user) => ({
-    updateOne: {
-      filter: { _id: user._id },
-      update: { $pull: { configuredChambers: { _id: chamberId } } },
-    },
-  }));
-  return USER.bulkWrite(updates);
-}
-function updateAssignedChamberFromUsers(users, chamberId) {
-  let updates = users.map((user) => ({
-    updateOne: {
-      filter: { _id: user._id },
-      update: {
-        $set: {
-          "configuredChambers.$[chamber].accessType": user.accessType,
-        },
-      },
-      arrayFilters: [{ "chamber._id": chamberId }],
-    },
-  }));
-  return USER.bulkWrite(updates);
-}
-function insertAssignedChamberOnUsers(users, chamberId) {
-  let updates = users.map((user) => ({
-    updateOne: {
-      filter: { _id: user._id },
-      update: {
-        $push: {
-          configuredChambers: { _id: chamberId, accessType: user.accessType },
-        },
-      },
-    },
-  }));
-  return USER.bulkWrite(updates);
-}
 //gives you the list of test on specified status array
 async function getTests(
   chamberIds,
   statusArr = ["Running", "Scheduled", "Stopped", "Paused", "Completed"]
 ) {
   try {
-    const tests = await Test.aggregate([
+    const testsReq = Test.aggregate([
       { $match: { createdOnChamber: { $in: chamberIds } } },
       { $match: { status: { $in: statusArr } } },
       {
@@ -825,6 +753,36 @@ async function getTests(
         },
       },
     ]);
+    const chambersInfoReq = TestChamber.find({
+      _id: { $in: chamberIds },
+    })
+      .select({
+        _id: 1,
+        name: 1,
+      })
+      .lean();
+    let tests = undefined;
+    let chamberInfo = undefined;
+    await Promise.all([testsReq, chambersInfoReq]).then(
+      (resolve) => {
+        tests = resolve[0];
+        chamberInfo = resolve[1];
+      },
+      (reject) => {
+        throw new Error(reject);
+      }
+    );
+    if (tests && chamberInfo) {
+      //add chamber name with the test details
+      tests.forEach((test) => {
+        let ch = chamberInfo.find(
+          (ch) => ch._id.toString() === test.createdOnChamber.toString()
+        );
+        if (ch) {
+          test.chamberName = ch.name;
+        }
+      });
+    }
     if (!tests) {
       return [];
     }
@@ -859,4 +817,101 @@ async function getTests(
     return;
   }
 }
+
+function removeUsersApiForChambers(userIds = [], chamberIds = []) {
+  if (
+    (userIds.length === 1 && chamberIds.length > 0) ||
+    (userIds.length > 0 && chamberIds.length === 1)
+  ) {
+    return ChamberAPI.deleteMany({
+      "assignedChamber._id": { $in: chamberIds },
+      assignedUser: { $in: userIds },
+    });
+  }
+}
+
+function updateUserApiForChamber(users, chamberId) {
+  let updates = users.map((user) => ({
+    updateOne: {
+      filter: {
+        "assignedChamber._id": chamberId,
+        assignedUser: user._id,
+      },
+      update: {
+        $set: {
+          "assignedChamber.accessType": user.accessType,
+        },
+      },
+    },
+  }));
+  return ChamberAPI.bulkWrite(updates);
+}
+
+function removeAssignedChamberFromUsers(users, chamberId) {
+  let updates = users.map((user) => ({
+    updateOne: {
+      filter: { _id: user._id },
+      update: { $pull: { configuredChambers: { _id: chamberId } } },
+    },
+  }));
+  return USER.bulkWrite(updates);
+}
+
+function updateAssignedChamberFromUsers(users, chamberId) {
+  let updates = users.map((user) => ({
+    updateOne: {
+      filter: { _id: user._id },
+      update: {
+        $set: {
+          "configuredChambers.$[chamber].accessType": user.accessType,
+        },
+      },
+      arrayFilters: [{ "chamber._id": chamberId }],
+    },
+  }));
+  return USER.bulkWrite(updates);
+}
+
+function insertAssignedChamberOnUsers(users, chamberId) {
+  let updates = users.map((user) => ({
+    updateOne: {
+      filter: { _id: user._id },
+      update: {
+        $push: {
+          configuredChambers: { _id: chamberId, accessType: user.accessType },
+        },
+      },
+    },
+  }));
+  return USER.bulkWrite(updates);
+}
+
+function convertIntoCSV(measuredParameters) {
+  const { current, voltage, chamberTemp, chamberHum, cellTemp, time } =
+    measuredParameters;
+  const header = [
+    "Time(S)",
+    "Current(A)",
+    "Voltage(V)",
+    "Chamber Temperature(\u00B0C)",
+    "Chamber Humidity(%)",
+  ];
+  cellTemp.forEach((tempObj) => {
+    header.push("Sensor " + tempObj.sensorId);
+  });
+  const csvData = time.map((time, i) => {
+    let row = [time, current[i], voltage[i], chamberTemp[i], chamberHum[i]];
+    cellTemp.forEach((tempObj) => {
+      row.push(tempObj.values[i]);
+    });
+    return row;
+  });
+  const output = stringify(csvData, {
+    header: true,
+    columns: header,
+    eof: false,
+  });
+  return output;
+}
+
 module.exports = testChamberRoute;
