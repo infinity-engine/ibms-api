@@ -6,7 +6,7 @@ const { TestChamber, Test } = require("../../../models/schema");
 const { stringify } = require("csv-stringify/sync");
 
 getDriveCycleRoute.get("/", checkAccess, async (req, res) => {
-  // /get-drive-cycle?apiKey=add&testId=id&channelNo=1&rowNo=1
+  // /get-drive-cycle?apiKey=add&testId=id&channel=1&row=1
   try {
     //console.log(req.query);
     const testId = mongoose.Types.ObjectId(req.query.testId);
@@ -23,8 +23,8 @@ getDriveCycleRoute.get("/", checkAccess, async (req, res) => {
     const testConfig = result[0].testConfig;
     const driveCycle = getDriveCycle(
       testConfig,
-      req.query.channelNo,
-      req.query.rowNo
+      req.query.channel,
+      req.query.row
     );
 
     if (driveCycle) {
