@@ -265,6 +265,30 @@ testChamberRoute.get("/live-tests", async (req, res) => {
   }
 });
 
+testChamberRoute.get("/api-key", async (req, res) => {
+  try {
+    const chamber = req.user.configuredChambers.find(
+      (chamber) => chamber._id.toString() === req.query.chamberId
+    );
+    if (!chamber) {
+      throw new Error("Not found");
+    }
+    if (chamber.accessType === "read") {
+      throw new Error("Access Denied!");
+    }
+    const api = await ChamberAPI.findOne({
+      "assignedChamber._id": mongoose.Types.ObjectId(req.query.chamberId),
+    });
+    if (!api) {
+      throw new Error("Not found");
+    }
+    res.json({ apiKey: api.apiKey });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
 testChamberRoute.get("/all-tests", async (req, res) => {
   try {
     const chamberIds = req.user.configuredChambers.map(
