@@ -9,7 +9,7 @@ const mongoose = require("mongoose");
 const publicRoute = require("./routes/public/public");
 mongoose.set("strictQuery", false);
 function dbConnect(req, res, next) {
-  mongoose.connect(process.env.DB_URL_BASE + "/i_bms");
+  mongoose.connect(process.env.DB_URL_BASE);
   next();
 }
 

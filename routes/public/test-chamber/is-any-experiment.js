@@ -32,10 +32,14 @@ isAnyExperimentRouter.get("/", checkAccess, async (req, res) => {
         },
       },
     ]);
-    const testConfig = result[0].testConfig;
-    testConfig.testId = result[0]._id;
-    //tests are exported as queue first schedule first out
-    res.json(getOutput(testConfig));
+    if (result.length > 0) {
+      const testConfig = result[0].testConfig;
+      testConfig.testId = result[0]._id;
+      //tests are exported as queue first schedule first out
+      res.json(getOutput(testConfig));
+    } else {
+      res.json(null);
+    }
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
