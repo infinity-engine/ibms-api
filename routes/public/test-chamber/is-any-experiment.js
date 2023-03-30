@@ -102,26 +102,40 @@ function getStep_1(testFormat, step) {
     if (field.value == "Charge") {
       // insert the logic for unit conversion from C/W to A
       step.mode = 1;
-      step.currentRate = fields[2].value;
     } else if (field.value == "Discharge") {
       step.mode = 2;
-      step.currentRate = fields[2].value;
     } else if (field.value == "Hold") {
       step.mode = 9;
       step.holdVolt = fields[2].value;
     } else if (field.value == "Rest") {
       step.mode = 8;
     }
+
+    field = fields[3];
+    if (step.mode == 1 || step.mode == 2) {
+      //logic for field 2 -input on unit of filed 3
+      if (field.value == "C") {
+        //insert logic from converting C rate to current Rate
+      } else if (field.value == "A") {
+        step.currentRate = fields[2].value;
+      } else if (field.value == "W") {
+        //insert logic here
+        //step.powVal = ??
+      }
+    }
   }
 
+  //time logic
   field = fields[6];
-  let timeLimit = fields[5].value;
-  if (field.value == "hours.") {
-    step.timeLimit = timeLimit * 3600;
-  } else if (field.value == "minutes.") {
-    step.timeLimit = timeLimit * 60;
-  } else if (field.value == "seconds.") {
-    step.timeLimit = timeLimit;
+  if (field.visibility === true) {
+    let timeLimit = fields[5].value;
+    if (field.value == "hours.") {
+      step.timeLimit = timeLimit * 3600;
+    } else if (field.value == "minutes.") {
+      step.timeLimit = timeLimit * 60;
+    } else if (field.value == "seconds.") {
+      step.timeLimit = timeLimit;
+    }
   }
 }
 function getStep_2(testFormat, step) {
@@ -131,23 +145,37 @@ function getStep_2(testFormat, step) {
     if (field.value == "Charge") {
       // insert the logic for unit conversion from C/W to A
       step.mode = 1;
-      step.currentRate = fields[2].value;
     } else if (field.value == "Discharge") {
       step.mode = 2;
-      step.currentRate = fields[2].value;
     }
+  }
+
+  field = fields[3];
+  if (field.value == "C") {
+    //insert logic from converting C rate to current Rate
+    //step.currentRate = ??
+  } else if (field.value == "A") {
+    step.currentRate = fields[2].value;
+  } else if (field.value == "W") {
+    //insert logic here
+    //step.powVal = ??
   }
   field = fields[5];
   step.voltLimit = field.value;
 }
+
 function getStep_3(testFormat, step) {
+  step.mode = 7;
   const fields = testFormat.fields;
-  let field = fields[3];
-  let timeLimit = fields[4].value;
-  if (field.value == "seconds.") {
+  let field = fields[4];
+  let timeLimit = fields[3].value;
+  step.total_n_samples = fields[1].value.time.length;
+  if (field.value == "hours.") {
+    step.timeLimit = timeLimit * 3600;
+  } else if (field.value == "minutes.") {
+    step.timeLimit = timeLimit * 60;
+  } else if (field.value == "seconds.") {
     step.timeLimit = timeLimit;
-  } else if (field.value == "kms.") {
-    //insert the clculation for it
   }
 }
 function correctStep(step) {
