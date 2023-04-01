@@ -48,7 +48,11 @@ isAnyExperimentRouter.get("/", checkAccess, async (req, res) => {
 
 function getOutput(testConfig) {
   if (testConfig) {
-    const testConfigOut = { channels: [], testId: testConfig.testId };
+    const testConfigOut = {
+      channels: [],
+      testId: testConfig.testId,
+      noOfChannels: testConfig.channels.length,
+    };
     for (let channel of testConfig.channels) {
       const config = {};
 
@@ -63,8 +67,8 @@ function getOutput(testConfig) {
 
       const steps = [];
       getSteps(channel.testFormats, steps);
-      config.steps = steps;
       config.info = correctInfo(channelInfo);
+      config.steps = steps;
       testConfigOut.channels.push(config);
     }
     return testConfigOut;
