@@ -1,13 +1,12 @@
 const express = require("express");
 const { default: mongoose } = require("mongoose");
 const checkAccess = require("../../../middleware/checkAccess/checkAccess");
-const { TestChamber, Test } = require("../../../models/schema");
+const { Test } = require("../../../models/schema");
 const feedExpResultRoute = express.Router();
-
 const {
   RowInfo,
-  MeasuredParameters,
   Channel,
+  CycleInfo,
 } = require("../../../models/testResultSchema");
 
 feedExpResultRoute.use(checkAccess);
@@ -78,25 +77,8 @@ async function setStatusExp(
       { $match: { _id: testId } },
       {
         $project: {
-          _id: 1,
-          status: 1,
-          testScheduleDate: 1,
-          testStartDate: 1,
-          testEndDate: 1,
-          testResult: 1,
-        },
-      },
-      {
-        $project: {
-          _id: 1,
-          status: 1,
-          testScheduleDate: 1,
-          testStartDate: 1,
-          testEndDate: 1,
-          "testResult.channels.channelNo": 1,
-          "testResult.channels.status": 1,
-          "testResult.channels.rows.rowNo": 1,
-          "testResult.channels.rows.status": 1,
+          "testResult.channels.cycles.rows.measuredParameters": 0,
+          "testResult.channels.cycles.rows.derivedParameters": 0,
         },
       },
     ]);
@@ -109,14 +91,18 @@ async function setStatusExp(
     //changes are allowed only if test isn't completed and stopped
 
     //update the status
+    // do not need to have any filter for cycle
+    // as all other rows for previous cycles of last cycles will have to be status completed,
+    // so that will alredy be filtered out by row filters
     let update = {
       status: status,
       testStartDate: Date.now(),
       testEndDate: Date.now(),
       "testResult.channels.$[channel].status": status,
       "testResult.channels.$[channel].chEndDate": Date.now(),
-      "testResult.channels.$[channel].rows.$[row].status": status,
-      "testResult.channels.$[channel].rows.$[row].rowEndDate": Date.now(),
+      "testResult.channels.$[channel].cycles.$[].rows.$[row].status": status,
+      "testResult.channels.$[channel].cycles.$[].rows.$[row].rowEndDate":
+        Date.now(),
     };
     let filters = [];
 
@@ -129,7 +115,9 @@ async function setStatusExp(
       delete update["testResult.channels.$[channel].status"];
       delete update["testResult.channels.$[channel].chEndDate"];
       if (status !== "Completed") {
-        delete update["testResult.channels.$[channel].rows.$[row].rowEndDate"];
+        delete update[
+          "testResult.channels.$[channel].cycles.$[].rows.$[row].rowEndDate."
+        ];
       }
 
       filters.push(
@@ -137,7 +125,10 @@ async function setStatusExp(
           "channel.channelNo": channelNo,
           "channel.status": { $nin: ["Completed", "Stopped"] },
         },
-        { "row.rowNo": rowNo, "row.status": { $nin: ["Completed", "Stopped"] } }
+        {
+          "row.rowNo": rowNo,
+          "row.status": { $nin: ["Completed", "Stopped"] },
+        }
       );
     } else if (channelNo) {
       //if only channelNo is given the last row as well as the channel will be updated,
@@ -150,7 +141,9 @@ async function setStatusExp(
       if (!(status === "Completed" || status === "Stopped")) {
         //only completed,and stopped
         delete update["testResult.channels.$[channel].chEndDate"];
-        delete update["testResult.channels.$[channel].rows.$[row].rowEndDate"];
+        delete update[
+          "testResult.channels.$[channel].cycles.$[].rows.$[row].rowEndDate"
+        ];
       }
       filters.push(
         {
@@ -160,7 +153,7 @@ async function setStatusExp(
         { "row.status": { $nin: ["Completed", "Stopped"] } }
       );
     } else {
-      //update all, all the channel and last-rows within
+      //update all, all the channel and last-rows within, of the last cycle
       if (
         status === "Running" &&
         Date.now() > testInfo.testScheduleDate &&
@@ -229,31 +222,59 @@ feedExpResultRoute.post(
       const status = await getLastUpdateStatus(testId, channel);
       if (status === null) {
         const newRow = await formNewRow(testId, channel, 1, req.body);
+        const newCycle = new CycleInfo({ rows: [newRow], cycleNo: 1 });
+        newCycle.validate((err) => {
+          if (err) {
+            throw new Error("Cycle Schema Validation Failed");
+          }
+        });
         const chMultiplier = await getChMultiplier(testId, channel);
         const newChannel = new Channel({
           channelNo: channel,
-          rows: [newRow],
+          cycles: [newCycle],
           multiplier: chMultiplier,
         });
+        newChannel.validate((err) => {
+          if (err) {
+            throw new Error("Channel Schema Validation Failed");
+          }
+        });
+
         //console.log(newRow, newChannel);
-        Test.updateOne(
+        const response = await Test.updateOne(
           { _id: testId },
           {
             $push: {
               "testResult.channels": newChannel,
             },
-          },
-          (err, result) => {
-            if (err) {
-              throw new Error("new row creation failed");
-            } else {
-              //console.log(result);
-              res.json({ status: "ok" });
-            }
           }
         );
+        if (response) {
+          res.json({ status: "ok" });
+        }
       } else if (status.statusCh !== "Running") {
         res.json({ status: "failed", msg: "channel's status must be running" });
+      } else if (status.rowNo === undefined) {
+        const newRow = await formNewRow(testId, channel, 1, req.body);
+        const response = await Test.updateOne(
+          { _id: testId },
+          {
+            $push: {
+              "testResult.channels.$[channel].cycles.$[cycle].rows": newRow,
+            },
+          },
+          {
+            arrayFilters: [
+              { "channel.channelNo": channel },
+              {
+                "cycle.cycleNo": status.cycleNo,
+              },
+            ],
+          }
+        );
+        if (response) {
+          res.json({ status: "ok" });
+        }
       } else if (status.statusRow === "Completed") {
         //open new Row for insreting measurement
         const newRow = await formNewRow(
@@ -262,33 +283,34 @@ feedExpResultRoute.post(
           status.rowNo + 1,
           req.body
         );
-        Test.updateOne(
+        const response = await Test.updateOne(
           { _id: testId },
           {
             $push: {
-              "testResult.channels.$[channel].rows": newRow,
+              "testResult.channels.$[channel].cycles.$[cycle].rows": newRow,
             },
           },
           {
-            arrayFilters: [{ "channel.channelNo": channel }],
-          },
-          (err, resutl) => {
-            if (err) {
-              throw new Error("new row creation failed");
-            } else {
-              res.json({ status: "ok" });
-            }
+            arrayFilters: [
+              { "channel.channelNo": channel },
+              {
+                "cycle.cycleNo": status.cycleNo,
+              },
+            ],
           }
         );
+        if (response) {
+          res.json({ status: "ok" });
+        }
       } else {
         const identity = {
           testId: testId,
           channelNo: channel,
           rowNo: status.rowNo,
+          cycleNo: status.cycleNo,
         };
-        insertMeasurement(identity, req.body)
+        await insertMeasurement(identity, req.body)
           .then((results) => {
-            //console.log(results);
             res.json({ status: "ok" });
           })
           .catch((err) => {
@@ -332,7 +354,7 @@ async function incrementMultiplier(
     if (channelNo && rowNo) {
       update = {
         $inc: {
-          "testResult.channels.$[channel].rows.$[row].currentMultiplierIndex": 1,
+          "testResult.channels.$[channel].cycles.$[cycle].rows.$[row].currentMultiplierIndex": 1,
         },
       };
       filters = [
@@ -341,15 +363,28 @@ async function incrementMultiplier(
           "channel.status": { $nin: ["Completed", "Stopped"] },
         },
         {
+          "cycle.cycleNo": currenStatus.cycleNo,
+        },
+        {
           "row.rowNo": rowNo,
           "row.status": { $nin: ["Completed", "Stopped"] },
           "row.currentMultiplierIndex": { $lt: currenStatus.rowMultiplier },
         },
       ];
     } else if (channelNo) {
+      const newRow = {
+        rowNo: 1,
+        multiplier: getRowMultiplier(testId, channelNo, 1),
+      };
+      const newCycle = new CycleInfo({
+        cycleNo: currenStatus.chMultiplierIndex + 1,
+      });
       update = {
         $inc: {
           "testResult.channels.$[channel].currentMultiplierIndex": 1,
+        },
+        $push: {
+          "testResult.channels.$[channel].cycles": newCycle,
         },
       };
       filters = [
@@ -380,14 +415,14 @@ async function formNewRow(testId, channelNo, rowNo, measurements) {
   const rowMultiplier = await getRowMultiplier(testId, channelNo, rowNo);
   const { current, voltage, chamberTemp, chamberHum, cellTemp, time } =
     measurements;
-  const measurement = new MeasuredParameters({
+  const measurement = {
     current: current,
     voltage: voltage,
     chamberTemp: chamberTemp,
     chamberHum: chamberHum,
     cellTemp: cellTemp,
     time: time,
-  });
+  };
   const row = new RowInfo({
     rowNo: rowNo,
     measuredParameters: measurement,
@@ -442,8 +477,7 @@ async function getChMultiplier(testId, channelNo) {
     );
     return channel.overallRowMultiplier;
   } catch (err) {
-    console.log(err);
-    return 1;
+    return new Error(err);
   }
 }
 
@@ -451,27 +485,27 @@ function insertMeasurement(identity, measurements) {
   const updates = {};
   if (measurements.voltage) {
     updates[
-      "testResult.channels.$[channel].rows.$[row].measuredParameters.voltage"
+      "testResult.channels.$[channel].cycles.$[cycle].rows.$[row].measuredParameters.voltage"
     ] = { $each: measurements.voltage };
   }
   if (measurements.current) {
     updates[
-      "testResult.channels.$[channel].rows.$[row].measuredParameters.current"
+      "testResult.channels.$[channel].cycles.$[cycle].rows.$[row].measuredParameters.current"
     ] = { $each: measurements.current };
   }
   if (measurements.chamberTemp) {
     updates[
-      "testResult.channels.$[channel].rows.$[row].measuredParameters.chamberTemp"
+      "testResult.channels.$[channel].cycles.$[cycle].rows.$[row].measuredParameters.chamberTemp"
     ] = { $each: measurements.chamberTemp };
   }
   if (measurements.chamberHum) {
     updates[
-      "testResult.channels.$[channel].rows.$[row].measuredParameters.chamberHum"
+      "testResult.channels.$[channel].cycles.$[cycle].rows.$[row].measuredParameters.chamberHum"
     ] = { $each: measurements.chamberHum };
   }
   if (measurements.time) {
     updates[
-      "testResult.channels.$[channel].rows.$[row].measuredParameters.time"
+      "testResult.channels.$[channel].cycles.$[cycle].rows.$[row].measuredParameters.time"
     ] = { $each: measurements.time };
   }
   const updateCellTempOps = measurements.cellTemp.map((tempObj) => ({
@@ -479,12 +513,13 @@ function insertMeasurement(identity, measurements) {
       filter: { _id: identity.testId },
       update: {
         $push: {
-          "testResult.channels.$[channel].rows.$[row].measuredParameters.cellTemp.$[sensor].values":
+          "testResult.channels.$[channel].cycles.$[cycle].rows.$[row].measuredParameters.cellTemp.$[sensor].values":
             { $each: tempObj.values },
         },
       },
       arrayFilters: [
         { "channel.channelNo": identity.channelNo },
+        { "cycle.cycleNo": identity.cycleNo },
         { "row.rowNo": identity.rowNo },
         { "sensor.sensorId": tempObj.sensorId },
       ],
@@ -499,6 +534,7 @@ function insertMeasurement(identity, measurements) {
       },
       arrayFilters: [
         { "channel.channelNo": identity.channelNo },
+        { "cycle.cycleNo": identity.cycleNo },
         { "row.rowNo": identity.rowNo },
       ],
     },
@@ -528,23 +564,34 @@ async function getLastUpdateStatus(testId, channel) {
     rowMultiplierIndex: undefined,
     rowMultiplier: undefined,
     lastTime: 0,
+    cycleNo: 0,
+    cycleStartDate: undefined,
+    cycleEndDate: undefined,
   };
   if (testResult) {
     const ch = testResult.channels.find((val) => val.channelNo == channel);
     if (!ch) {
       return null;
     }
-    const row = ch.rows[ch.rows.length - 1];
+    //only info about the current cycle is required which always present at the last
+    const lastCycle = ch.cycles[ch.cycles.length - 1];
+    ch.rows = lastCycle?.rows;
     defaultRes.chNo = channel;
     defaultRes.statusCh = ch.status;
     defaultRes.chMultiplierIndex = ch.currentMultiplierIndex;
     defaultRes.chMultiplier = ch.multiplier;
-    defaultRes.rowNo = row.rowNo;
-    defaultRes.statusRow = row.status;
-    defaultRes.rowMultiplierIndex = row.currentMultiplierIndex;
-    defaultRes.rowMultiplier = row.multiplier;
-    defaultRes.lastTime =
-      row.measuredParameters.time[row.measuredParameters.time.length - 1];
+    defaultRes.cycleStartDate = lastCycle.cycleStartDate;
+    defaultRes.cycleEndDate = lastCycle.cycleEndDate;
+    defaultRes.cycleNo = lastCycle.cycleNo;
+    if (ch.rows?.length > 0) {
+      const row = ch.rows[ch.rows.length - 1];
+      defaultRes.rowNo = row.rowNo;
+      defaultRes.statusRow = row.status;
+      defaultRes.rowMultiplierIndex = row.currentMultiplierIndex;
+      defaultRes.rowMultiplier = row.multiplier;
+      defaultRes.lastTime =
+        row.measuredParameters.time[row.measuredParameters.time.length - 1];
+    }
   } else {
     return null;
   }

@@ -23,7 +23,16 @@ const measuredParametersSchema = new Schema(
 const rowInfoSchema = new Schema(
   {
     rowNo: Number,
-    measuredParameters: measuredParametersSchema,
+    measuredParameters: {
+      type: measuredParametersSchema,
+      default: {
+        current: [],
+        voltage: [],
+        chamberTemp: [],
+        cellTemp: [],
+        time: [],
+      },
+    },
     derivedParameters: { type: mongoose.Schema.Types.Mixed },
     rowStartDate: { type: Date, default: Date.now },
     rowEndDate: Date,
@@ -40,9 +49,15 @@ const rowInfoSchema = new Schema(
   },
   { versionKey: false }
 );
+const cycleSchema = new Schema({
+  rows: [rowInfoSchema],
+  cycleNo: Number,
+  cycleStartDate: { type: Date, default: Date.now },
+  cycleEndDate: Date,
+});
 const channelSchema = new Schema(
   {
-    rows: [rowInfoSchema],
+    cycles: [cycleSchema],
     channelNo: Number,
     status: {
       type: String,
@@ -67,9 +82,16 @@ const testResultSchema = new Schema(
 );
 
 const RowInfo = mongoose.model("RowInfo", rowInfoSchema);
+const CycleInfo = mongoose.model("CycleInfo", cycleSchema);
 const MeasuredParameters = mongoose.model(
   "MeasuredParameters",
   measuredParametersSchema
 );
 const Channel = mongoose.model("Channel", channelSchema);
-module.exports = { RowInfo, MeasuredParameters, Channel, testResultSchema };
+module.exports = {
+  RowInfo,
+  MeasuredParameters,
+  Channel,
+  testResultSchema,
+  CycleInfo,
+};
