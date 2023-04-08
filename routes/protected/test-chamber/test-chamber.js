@@ -248,6 +248,7 @@ testChamberRoute.get("/", async (req, res) => {
   }
 });
 
+//get you list of tests which are running or paused
 testChamberRoute.get("/live-tests", async (req, res) => {
   //gives the list of tests that are on live;
   try {
@@ -265,6 +266,7 @@ testChamberRoute.get("/live-tests", async (req, res) => {
   }
 });
 
+//gives you api key for the particular chamber
 testChamberRoute.get("/api-key", async (req, res) => {
   try {
     const chamber = req.user.configuredChambers.find(
@@ -289,6 +291,7 @@ testChamberRoute.get("/api-key", async (req, res) => {
   }
 });
 
+//gives you all list of tests
 testChamberRoute.get("/all-tests", async (req, res) => {
   try {
     const chamberIds = req.user.configuredChambers.map(
@@ -323,8 +326,8 @@ testChamberRoute.post("/get-test-data", async (req, res) => {
       { $match: { _id: testId, createdOnChamber: chamberId } },
       {
         $project: {
-          "testResult.channels.rows.measuredParameters": 0,
-          "testResult.channels.rows.derivedParameters": 0,
+          "testResult.channels.cycles.rows.measuredParameters": 0,
+          "testResult.channels.cycles.rows.derivedParameters": 0,
         },
       },
     ]);
@@ -348,13 +351,17 @@ testChamberRoute.post("/get-test-data", async (req, res) => {
           let chRes = testInfo.testResult.channels.find(
             (ch_) => ch_.channelNo == ch.channelNumber
           );
+
           channel.status = chRes?.status;
-          channel.rows = chRes?.rows;
+          if (chRes) {
+            channel.rows = chRes.cycles[chRes.cycles.length - 1].rows;
+          }
           channel.currentMultiplierIndex = chRes?.currentMultiplierIndex;
           channel.chStartDate = chRes?.chStartDate;
           channel.chEndDate = chRes?.chEndDate;
         } catch (err) {
           //do nothing
+          console.log(err);
         }
         channels.push(channel);
       });
@@ -372,6 +379,9 @@ testChamberRoute.post("/get-test-data", async (req, res) => {
   }
 });
 
+//it change the force status of the channel
+//hopefully the test chamber will fetch this status and take action
+//and then change the actual status
 testChamberRoute.post("/force-status", async (req, res) => {
   try {
     if (
@@ -552,15 +562,15 @@ async function getMeasurement(chamberId, testId, channelNo, indexAfter = 0) {
         $group: {
           _id: "$testResult.channelNo",
           status: { $first: "$testResult.status" },
-          rows: { $first: "$testResult.rows" },
+          cycles: { $first: "$testResult.cycles" },
         },
       },
       {
         $project: {
           status: 1,
-          "rows.measuredParameters": 1,
-          "rows.derivedParameters": 1,
-          "rows.rowNo": 1,
+          "cycles.rows.measuredParameters": 1,
+          "cycles.rows.derivedParameters": 1,
+          "cycles.rows.rowNo": 1,
         },
       },
     ]);
@@ -576,27 +586,30 @@ async function getMeasurement(chamberId, testId, channelNo, indexAfter = 0) {
         cellTemp: [],
         time: [],
       };
-      testInfo.rows.forEach((row) => {
-        measuredParameters.current.push(...row.measuredParameters.current);
-        measuredParameters.voltage.push(...row.measuredParameters.voltage);
-        measuredParameters.chamberTemp.push(
-          ...row.measuredParameters.chamberTemp
-        );
-        measuredParameters.chamberHum.push(
-          ...row.measuredParameters.chamberHum
-        );
-        measuredParameters.time.push(...row.measuredParameters.time);
-        if (measuredParameters.cellTemp.length > 0) {
-          row.measuredParameters.cellTemp.forEach((tempObj) => {
-            const prevTempObj = measuredParameters.cellTemp.find(
-              (_tempObj) => _tempObj.sensorId === tempObj.sensorId
-            );
-            prevTempObj?.values.push(...tempObj.values);
-          });
-        } else {
-          measuredParameters.cellTemp = row.measuredParameters.cellTemp;
-        }
+      testInfo.cycles.forEach((cycle) => {
+        cycle.rows.forEach((row) => {
+          measuredParameters.current.push(...row.measuredParameters.current);
+          measuredParameters.voltage.push(...row.measuredParameters.voltage);
+          measuredParameters.chamberTemp.push(
+            ...row.measuredParameters.chamberTemp
+          );
+          measuredParameters.chamberHum.push(
+            ...row.measuredParameters.chamberHum
+          );
+          measuredParameters.time.push(...row.measuredParameters.time);
+          if (measuredParameters.cellTemp.length > 0) {
+            row.measuredParameters.cellTemp.forEach((tempObj) => {
+              const prevTempObj = measuredParameters.cellTemp.find(
+                (_tempObj) => _tempObj.sensorId === tempObj.sensorId
+              );
+              prevTempObj?.values.push(...tempObj.values);
+            });
+          } else {
+            measuredParameters.cellTemp = row.measuredParameters.cellTemp;
+          }
+        });
       });
+
       //slice the previous sent measurements
       if (indexAfter > 0) {
         measuredParameters.current = measuredParameters.current.slice(
@@ -758,6 +771,7 @@ async function getUsersForChamber(chamberId) {
     return;
   }
 }
+
 //gives you the list of test on specified status array
 async function getTests(
   chamberIds,
@@ -772,8 +786,8 @@ async function getTests(
       },
       {
         $project: {
-          "testResult.channels.rows.measuredParameters": 0,
-          "testResult.channels.rows.derivedParameters": 0,
+          "testResult.channels.cycles.rows.measuredParameters": 0,
+          "testResult.channels.cycles.rows.derivedParameters": 0,
         },
       },
     ]);
@@ -816,18 +830,28 @@ async function getTests(
           let totalRows = test.testConfig.channels.find(
             (ch_) => ch_.channelNumber == ch.channelNo
           )?.testFormats?.length;
-          return {
+          let onCycle = ch.cycles.length;
+          let onRows = ch.cycles[onCycle - 1].rows?.length;
+          let ob = {
             channelNo: ch.channelNo,
             statusCh: ch.status,
             chMultiplierIndex: ch.currentMultiplierIndex,
             chMultiplier: ch.multiplier,
-            onRows: ch.rows.length,
+            onRows: onRows,
             totalRows: totalRows,
-            statusRow: ch.rows[ch.rows.length - 1].status,
-            rowMultiplierIndex:
-              ch.rows[ch.rows.length - 1].currentMultiplierIndex,
-            rowMultiplier: ch.rows[ch.rows.length - 1].multiplier,
           };
+          if (onRows) {
+            ob["statusRow"] = ch.cycles[onCycle - 1].rows[onRows - 1].status;
+            ob["rowMultiplierIndex"] =
+              ch.cycles[onCycle - 1].rows[onRows - 1].currentMultiplierIndex;
+            ob["rowMultiplier"] =
+              ch.cycles[onCycle - 1].rows[onRows - 1].multiplier;
+          } else {
+            ob["statusRow"] = undefined;
+            ob["rowMultiplierIndex"] = undefined;
+            ob["rowMultiplier"] = undefined;
+          }
+          return ob;
         });
       } catch (err) {
         //do nothing;
