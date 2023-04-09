@@ -3,7 +3,7 @@ image: node:14-slim
 command: bash
 forward:
   - 8080:8080
-  - 27017:27017
+  - 8081:8081
 sync:
   - .:/app
 autocreate: true
