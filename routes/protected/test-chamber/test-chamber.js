@@ -10,7 +10,6 @@ const {
 } = require("../../../models/schema");
 const crypto = require("crypto");
 const { stringify } = require("csv-stringify/sync");
-const { resolve } = require("path");
 
 //create a new test chamber
 testChamberRoute.post("/", async (req, res) => {
@@ -542,6 +541,39 @@ testChamberRoute.post("/download-test-result", async (req, res) => {
   }
 });
 
+//get whether is chamber is connected or not based on whther the lastseen field is updated befor maximum of delay = 10sec
+testChamberRoute.get("/is-connected", async (req, res) => {
+  try {
+    if (!req.query.chamberId) {
+      throw new Error("chamberId isn't received.");
+    }
+    let delay = 10000; //in ms
+    if (req.query.delay) {
+      delay = +req.query.delay;
+    }
+    const chamber = req.user.configuredChambers.find(
+      (cham) => cham._id.toString() === req.query.chamberId
+    );
+
+    if (!chamber) {
+      throw new Error("Test Chamber not found.");
+    }
+    const chamberId = chamber._id;
+
+    const result = await TestChamber.findOne({ _id: chamberId }).select({
+      lastSeen: 1,
+    });
+    if (result && Date.now() - result.lastSeen <= delay) {
+      res.json({ isConnected: true });
+    } else {
+      res.json({ isConnected: false });
+    }
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
 async function getMeasurement(chamberId, testId, channelNo, indexAfter = 0) {
   try {
     const testData = await Test.aggregate([
@@ -941,7 +973,7 @@ function convertIntoCSV(measuredParameters) {
     "Time(S)",
     "Current(A)",
     "Voltage(V)",
-    "Chamber Temperature(\u00B0C)",
+    "Chamber Temperature(°C)",
     "Chamber Humidity(%)",
   ];
   cellTemp.forEach((tempObj) => {
