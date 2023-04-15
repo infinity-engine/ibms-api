@@ -25,7 +25,8 @@ app.use(express.text({ type: "text/csv" }));
 
 app.get("/", (req, res) => {
   res.send(
-    "You have reached to intelligent-bms api, developed by Koushik Samanta."
+    "You have reached to intelligent-bms api, developed by Koushik Samanta. Time:" +
+      Date.now()
   );
 });
 
