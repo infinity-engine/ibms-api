@@ -55,6 +55,8 @@ const cycleSchema = new Schema({
   cycleStartDate: { type: Date, default: Date.now },
   cycleEndDate: Date,
 });
+//remeber there is no status of the current cycle,
+//it is defined as the status of the last rows
 const channelSchema = new Schema(
   {
     cycles: [cycleSchema],

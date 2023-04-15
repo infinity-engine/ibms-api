@@ -508,7 +508,7 @@ function insertMeasurement(identity, measurements) {
       "testResult.channels.$[channel].cycles.$[cycle].rows.$[row].measuredParameters.time"
     ] = { $each: measurements.time };
   }
-  const updateCellTempOps = measurements.cellTemp.map((tempObj) => ({
+  const updateCellTempOps = measurements.cellTemp?.map((tempObj) => ({
     updateOne: {
       filter: { _id: identity.testId },
       update: {
