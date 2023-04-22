@@ -4,7 +4,7 @@ const userRoute = require("./routes/users");
 const cors = require("cors");
 require("dotenv/config");
 const protectedRoute = require("./routes/protected/protected");
-const swagger = require("./swagger");
+//const swagger = require("./swagger");
 
 const mongoose = require("mongoose");
 const publicRoute = require("./routes/public/public");
