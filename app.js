@@ -47,7 +47,7 @@ app.use("/api/protected", protectedRoute);
 
 app.use("/api/public", publicRoute);
 
-swagger(app);
+//swagger(app);
 
 app.listen(process.env.PORT, () => {
   console.log(`Listening on port ${process.env.PORT}`);
