@@ -468,6 +468,7 @@ testChamberRoute.post("/create-test/", async (req, res) => {
         { _id: chamberId },
         { $push: { testsPerformed: { testId: testConfig._id } } }
       );
+
       const cells = testConfig.testConfig.channels.map((ch) => ({
         cellID: ch.cellID,
         testConfigChannelId: ch._id,
@@ -568,6 +569,59 @@ testChamberRoute.get("/is-connected", async (req, res) => {
     } else {
       res.json({ isConnected: false });
     }
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ msg: "Error" });
+  }
+});
+
+testChamberRoute.delete("/delete-test", async (req, res) => {
+  try {
+    if (!req.query.testId || !req.query.chamberId) {
+      throw new Error("testId or chamberId isn't received.");
+    }
+    const testId = mongoose.Types.ObjectId(req.query.testId);
+    const chamber = req.user.configuredChambers.find(
+      (cham) => cham._id.toString() === req.query.chamberId
+    );
+    if (!chamber || chamber.accessType != "admin") {
+      throw new Error("Test Chamber not found.");
+    }
+    const test = await Test.findOne({ _id: testId });
+    if (!test) {
+      throw new Error("Test info not found");
+    }
+    const cells = test.testConfig.channels.map((ch) => ({
+      cellID: ch.cellID,
+      testConfigChannelId: ch._id,
+    }));
+
+    const chamberId = chamber._id;
+    const p1 = Test.deleteOne({ _id: testId });
+    const p2 = TestChamber.updateOne(
+      { _id: chamberId },
+      { $pull: { testsPerformed: { testId: testId } } }
+    );
+    const p3 = Cell.updateMany(
+      { _id: { $in: cells.map((c) => c.cellID) } },
+      {
+        $pull: {
+          testsPerformed: {
+            testConfigChannelId: {
+              $in: cells.map((c) => c.testConfigChannelId),
+            },
+          },
+        },
+      }
+    );
+
+    Promise.all([p1, p2, p3])
+      .then((results) => {
+        res.json({ msg: "ok" });
+      })
+      .catch((err) => {
+        throw new Error(err);
+      });
   } catch (err) {
     console.log(err);
     res.status(500).json({ msg: "Error" });
