@@ -400,7 +400,7 @@ async function incrementMultiplier(
     const res = await Test.updateOne({ _id: testId }, update, {
       arrayFilters: filters,
     });
-    console.log(res);
+    //console.log(res);
     if (!res.acknowledged || res.modifiedCount < 1) {
       return false;
     }
