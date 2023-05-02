@@ -45,6 +45,6 @@ networks:
     name: mongodb_network
 
 endpoints:
-  - path: /
+  - path: /db
     service: mongo
     port: 27017
