@@ -4,6 +4,7 @@ command: bash
 forward:
   - 8080:8080
   - 8081:8081
+  - 27020:27020
 sync:
   - .:/app
 autocreate: true
