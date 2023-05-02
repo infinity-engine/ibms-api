@@ -10,7 +10,7 @@ services:
     environment:
       NODE_ENV: "production"
       PORT: 8080
-      DB_URL_BASE: mongodb://mongo:27017/i_bms
+      DB_URL_BASE: mongodb://mongo:27020/i_bms
       AUTH0_AUDIENCE: https://express.sample
       AUTH0_DOMAIN: https://dev-n8d0f7yf.au.auth0.com/
 
@@ -19,7 +19,7 @@ services:
     container_name: mongo
     restart: unless-stopped
     ports:
-      - 27017:27017
+      - 27020:27017
     volumes:
       - data:/data/db
 
