@@ -1,0 +1,94 @@
+[{
+    "templateName": "LGM50",
+    "manufacturer": "LG",
+    "nomVoltage": 3.63,
+    "nomCurrent": 5,
+    "nomCapacity": 5,
+    "maxVoltage": 4.2,
+    "minVoltage": 2.65,
+    "formFactor": "21700",
+    "cellChemistry": "NMC",
+    "type": "Cylindrical"
+  },
+
+  {
+    "templateName": "HE2",
+    "manufacturer": "LG",
+    "nomVoltage": 3.6,
+    "nomCurrent": 2.5,
+    "nomCapacity": 2.5,
+    "maxVoltage": 4.2,
+    "minVoltage": 2.5,
+    "formFactor": "18650",
+    "cellChemistry": "LCO",
+    "type": "Cylindrical"
+  },
+
+  {
+    "templateName": "AMS",
+    "manufacturer": "AMS",
+    "nomVoltage": 3.6,
+    "nomCurrent": 2.5,
+    "nomCapacity": 2.5,
+    "maxVoltage": 4.25,
+    "minVoltage": 2.5,
+    "formFactor": "21700",
+    "cellChemistry": "NMC",
+    "type": "Cylindrical"
+  },
+
+  {
+    "templateName": "35E",
+    "manufacturer": "Samsung",
+    "nomVoltage": 3.63,
+    "nomCurrent": 3.5,
+    "nomCapacity": 3.5,
+    "maxVoltage": 4.2,
+    "minVoltage": 2.65,
+    "formFactor": "18650",
+    "cellChemistry": "NCA",
+    "type": "Cylindrical"
+  },
+
+  {
+    "templateName": "NCRB",
+    "manufacturer": "Panasonic",
+    "nomVoltage": 3.6,
+    "nomCurrent": 3.4,
+    "nomCapacity": 3.4,
+    "maxVoltage": 4.35,
+    "minVoltage": 2.75,
+    "formFactor": "18650",
+    "cellChemistry": "NCA",
+    "type": "Cylindrical"
+  },
+
+  {
+    "templateName": "VTC5A",
+    "manufacturer": "Sony",
+    "nomVoltage": 3.6,
+    "nomCurrent": 2.6,
+    "nomCapacity": 2.6,
+    "maxVoltage": 4.25,
+    "minVoltage": 2.0,
+    "formFactor": "18650",
+    "cellChemistry": "NCA",
+    "type": "Cylindrical"
+  },
+
+  {
+    "templateName": "m1B",
+    "manufacturer": "A123",
+    "nomVoltage": 3.3,
+    "nomCurrent": 2.5,
+    "nomCapacity": 2.5,
+    "maxVoltage": 3.6,
+    "minVoltage": 2.0,
+    "formFactor": "26650",
+    "cellChemistry": "LFP",
+    "type": "Cylindrical"
+  }
+
+]
+
+
