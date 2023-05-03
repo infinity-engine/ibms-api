@@ -14,14 +14,17 @@ cellInfoRoute.post("/", async (req, res) => {
       .filter((user) => user._id !== req.user._id.toString())
       .map((user) => ({
         _id: mongoose.Types.ObjectId(user._id),
-        accessType: "write",
+        accessType: "read",
       }));
 
     assignedUsers.push({ _id: req.user._id, accessType: "admin" });
 
     const cells = Array(q)
       .fill({ ...body, assignedUsers })
-      .map((cell, i) => ({ ...cell, cellName: `${cellName}-${i + 1}` }));
+      .map((cell, i) => ({
+        ...cell,
+        cellName: `${cellName}${q > 1 ? "-" + i + 1 : ""}`,
+      }));
 
     const cellsInserted = await Cell.create(cells);
 
@@ -31,7 +34,7 @@ cellInfoRoute.post("/", async (req, res) => {
     }));
     const updateUserAccessOnCellOther = cellsInserted.map((cell) => ({
       _id: cell._id,
-      accessType: "write",
+      accessType: "read",
     }));
 
     await Promise.all([
@@ -39,12 +42,14 @@ cellInfoRoute.post("/", async (req, res) => {
         { _id: req.user._id },
         { $push: { configuredCells: updateUserAccessOnCell } }
       ),
-      ...assignedUsers.map((user) =>
-        USER.updateOne(
-          { _id: user._id },
-          { $push: { configuredCells: updateUserAccessOnCellOther } }
-        )
-      ),
+      ...assignedUsers
+        .filter((user) => user._id.toString() !== req.user._id.toString())
+        .map((user) =>
+          USER.updateOne(
+            { _id: user._id },
+            { $push: { configuredCells: updateUserAccessOnCellOther } }
+          )
+        ),
     ]);
 
     res.json({ msg: "success" });
