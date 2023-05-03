@@ -40,6 +40,8 @@ services:
 
 volumes:
   data:
+    driver_opts:
+      size: 10Gi
 
 networks:
   default:
