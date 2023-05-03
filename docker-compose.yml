@@ -13,6 +13,7 @@ services:
       DB_URL_BASE: mongodb://mongo:27017/i_bms
       AUTH0_AUDIENCE: https://express.sample
       AUTH0_DOMAIN: https://dev-n8d0f7yf.au.auth0.com/
+    scale: 4
 
   mongo:
     image: mongo:6.0
@@ -43,8 +44,3 @@ volumes:
 networks:
   default:
     name: mongodb_network
-
-endpoints:
-  - path: /db
-    service: mongo
-    port: 27017
