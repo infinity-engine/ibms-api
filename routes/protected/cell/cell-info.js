@@ -23,7 +23,7 @@ cellInfoRoute.post("/", async (req, res) => {
       .fill({ ...body, assignedUsers })
       .map((cell, i) => ({
         ...cell,
-        cellName: `${cellName}${q > 1 ? "-" + i + 1 : ""}`,
+        cellName: `${cellName}${q > 1 ? "-" + (i + 1) : ""}`,
       }));
 
     const cellsInserted = await Cell.create(cells);
