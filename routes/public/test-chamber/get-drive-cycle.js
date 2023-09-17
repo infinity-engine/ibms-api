@@ -23,8 +23,8 @@ getDriveCycleRoute.get("/", checkAccess, async (req, res) => {
     const testConfig = result[0].testConfig;
     const driveCycle = getDriveCycle(
       testConfig,
-      req.query.channel,
-      req.query.row
+      +req.query.channel,
+      +req.query.row
     );
 
     if (driveCycle) {
@@ -69,10 +69,13 @@ function getDriveCycle(testConfig, channelNo, rowNo) {
   if (!testConfig) {
     return null;
   }
-  if (channelNo > testConfig.channels.length) {
-    return null;
-  }
-  const channel = testConfig.channels[channelNo - 1];
+  // if (channelNo > testConfig.channels.length) {
+  //   return null;
+  // }
+  //const channel = testConfig.channels[channelNo - 1];
+  const channel = testConfig.channels.find(
+    (ch) => ch.channelNumber == channelNo
+  );
   if (rowNo > channel.testFormats.length) {
     return null;
   }

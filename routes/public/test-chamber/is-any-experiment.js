@@ -36,7 +36,9 @@ isAnyExperimentRouter.get("/", checkAccess, async (req, res) => {
       const testConfig = result[0].testConfig;
       testConfig.testId = result[0]._id;
       //tests are exported as queue first schedule first out
-      res.json(getOutput(testConfig));
+      const temp = getOutput(testConfig);
+      //console.log(temp);
+      res.json(temp);
     } else {
       res.json(null);
     }
