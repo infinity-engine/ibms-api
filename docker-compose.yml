@@ -1,47 +1,24 @@
-version: '3.9'
+version: '3'
 services:
   node:
     working_dir: /app
     build: "./"
     restart: always
     command: ["npm","start"]
-    ports:
-      - "8080:8080"
+    
     environment:
       NODE_ENV: "production"
       PORT: 8080
       DB_URL_BASE: mongodb+srv://e_mob:KzweuGpSi2cQj1Yo@e-mobility.0vu1kp0.mongodb.net/i_bms
       AUTH0_AUDIENCE: https://express.sample
       AUTH0_DOMAIN: https://dev-n8d0f7yf.au.auth0.com/
-    scale: 4
-
-  mongo:
-    image: mongo:6.0
-    container_name: mongo
-    restart: unless-stopped
+    
     ports:
-      - 27017:27017
-    volumes:
-      - data:/data/db
+      - "8080:8080"
 
-  mongo-express:
-    image: mongo-express
-    container_name: mongo-express
-    restart: unless-stopped
-    ports:
-      - 8081:8081
-    environment:
-      ME_CONFIG_MONGODB_SERVER: mongo
-      ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
-      ME_CONFIG_BASICAUTH_USERNAME: i_bms@e_mobility
-      ME_CONFIG_BASICAUTH_PASSWORD: z@AX1k54LZ%2
-    depends_on:
-      - mongo
 
-volumes:
-  data:
-    driver_opts:
-      size: 5Gi
+
+
 
 networks:
   default:
